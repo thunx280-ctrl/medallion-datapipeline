@@ -1,0 +1,24 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+config/*.json
+credentials*.json
+
+# Python environments and generated files
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local editor and database session files
+.vscode/
+postgres.session.sql
+
+# Source data and locally generated reports (may contain sensitive data)
+VietDist_SampleData/
+*.xlsx
+*.pbix
+
+# Local analysis instructions
+COWORK_INSTRUCTIONS.md
