@@ -1,4 +1,4 @@
-# Data Dictionary — VietDist Analytics Platform
+# Data Dictionary — Analytics Platform
 
 Tài liệu này mô tả toàn bộ dữ liệu trong pipeline: nguồn gốc, ý nghĩa nghiệp vụ, và cấu trúc từng bảng ở 3 layer Bronze → Silver → Gold. Đọc tài liệu này trước khi viết SQL/DAX mới, hoặc khi cần giải thích project cho người khác (phỏng vấn, review portfolio).
 
