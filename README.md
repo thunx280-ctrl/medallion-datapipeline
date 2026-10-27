@@ -5,87 +5,89 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze%20→%20Silver%20→%20Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
 [![Data Modeling](https://img.shields.io/badge/Data_Modeling-Kimball_Star_Schema-blue?style=for-the-badge)](https://www.kimballgroup.com/)
 [![SCD Type 2](https://img.shields.io/badge/SCD_Type_2-Historical_Integrity-orange?style=for-the-badge)]()
-[![Power BI](https://img.shields.io/badge/Power_BI-Executive_Dashboard-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)](https://powerbi.microsoft.com/)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
+[![Domain](https://img.shields.io/badge/Domain-FMCG_Distribution-green?style=for-the-badge)]()
+[![Status](https://img.shields.io/badge/Pipeline_Status-Production_Ready-success?style=for-the-badge)]()
 
-> **A production-ready Analytics Engineering data pipeline engineered to ingest, clean, model, and serve sales and distribution data (~164,901 records across 10 disparate sources) for a nationwide FMCG enterprise using Python, PostgreSQL, Medallion Lakehouse Architecture (Bronze → Silver → Gold), Kimball Dimensional Modeling (SCD Type 2), and Power BI.**
+> **An enterprise-grade Analytics Engineering & Data Pipeline portfolio project implementing an automated, resilient ELT data warehouse for nationwide FMCG distribution operations (~164,901 records across 10 disparate sources) using Python, PostgreSQL, Medallion Lakehouse Architecture (Bronze → Silver → Gold), Kimball Dimensional Modeling (SCD Type 2), and BI-ready analytical data marts.**
+>
+> 📌 *Project Scope: This project focuses on the core Data Engineering & Analytics Engineering lifecycle — from raw ingestion, automated data profiling, and staging cleansing, to Kimball Star Schema dimensional modeling, SCD Type 2 historical preservation, and fail-fast orchestration. Curated Gold data marts serve as the single source of truth for downstream BI tools.*
 
 ---
 
 ## 📌 Table of Contents
-1. [Background & Business Context](#-1-background--business-context)
-   - [1.1 Executive Context & Distribution Model](#11-executive-context--distribution-model)
-   - [1.2 Verified Operational Scale & Empirical Benchmarks](#12-verified-operational-scale--empirical-benchmarks)
-   - [1.3 Core Business & Technical Challenges](#13-core-business--technical-challenges)
-2. [Step-by-Step Data Pipeline Methodology & Empirical Evidence](#-2-step-by-step-data-pipeline-methodology--empirical-evidence)
+1. [Executive Summary & Business Context](#-1-executive-summary--business-context)
+   - [1.1 FMCG Commercial Distribution Model](#11-fmcg-commercial-distribution-model)
+   - [1.2 Verified Operational Scale & Empirical Data Benchmarks](#12-verified-operational-scale--empirical-data-benchmarks)
+   - [1.3 Core Engineering & Business Bottlenecks](#13-core-engineering--business-bottlenecks)
+2. [Step-by-Step Data Pipeline Methodology & Empirical Proof](#-2-step-by-step-data-pipeline-methodology--empirical-proof)
    - [Step 1: Pipeline Blueprint & Medallion Topology](#step-1-pipeline-blueprint--medallion-topology)
-   - [Step 2: Bronze Layer — Ingestion Engine & Data Profiling](#step-2-bronze-layer--ingestion-engine--data-profiling)
+   - [Step 2: Bronze Layer — Ingestion Engine & Automated Profiling](#step-2-bronze-layer--ingestion-engine--automated-profiling)
    - [Step 3: Silver Layer — Conformance, Cleansing & Deduplication](#step-3-silver-layer--conformance-cleansing--deduplication)
-   - [Step 4: Gold Layer — Kimball Star Schema, SCD2 & Data Marts](#step-4-gold-layer--kimball-star-schema-scd2--data-marts)
-   - [Step 5: Orchestration Engine, Observability & Analytics Delivery](#step-5-orchestration-engine-observability--analytics-delivery)
-3. [Data Architecture & Dimensional Modeling](#-3-data-architecture--dimensional-modeling)
+   - [Step 4: Gold Layer — Kimball Star Schema, SCD2 & Analytical Marts](#step-4-gold-layer--kimball-star-schema-scd2--analytical-marts)
+   - [Step 5: Pipeline Orchestration, Observability & BI Readiness](#step-5-pipeline-orchestration-observability--bi-readiness)
+3. [Kimball Dimensional Modeling & Data Architecture](#-3-kimball-dimensional-modeling--data-architecture)
    - [3.1 Kimball Star Schema Architecture](#31-kimball-star-schema-architecture)
    - [3.2 Slowly Changing Dimensions (SCD Type 2) Mechanics](#32-slowly-changing-dimensions-scd-type-2-mechanics)
    - [3.3 Comprehensive Data Dictionary](#33-comprehensive-data-dictionary)
 4. [Deep-Dive Engineering Highlights & Code Implementation](#-4-deep-dive-engineering-highlights--code-implementation)
    - [4.1 Chunked Streaming Python Ingestion](#41-chunked-streaming-python-ingestion)
    - [4.2 SQL Composite Key Deduplication](#42-sql-composite-key-deduplication)
-   - [4.3 Point-in-Time (AS-OF) Historical Joins](#43-point-in-time-as-of-historical-joins)
+   - [4.3 Point-in-Time (AS-OF) Historical Joins for SCD2](#43-point-in-time-as-of-historical-joins-for-scd2)
    - [4.4 Multi-Version Budget Planning Window Ranking](#44-multi-version-budget-planning-window-ranking)
    - [4.5 Fail-Fast Orchestration Engine](#45-fail-fast-orchestration-engine)
-5. [Business Impact & Quantified Analytical Findings](#-5-business-impact--quantified-analytical-findings)
+5. [Quantified Business Findings & Analytical Mart Verification](#-5-quantified-business-findings--analytical-mart-verification)
 6. [Prioritized Strategic Action Matrix](#-6-prioritized-strategic-action-matrix)
 7. [Repository Structure & Quickstart Guide](#-7-repository-structure--quickstart-guide)
 8. [Author & Contact](#-8-author--contact)
 
 ---
 
-## 🏢 1. Background & Business Context
+## 🏢 1. Executive Summary & Business Context
 
-### 1.1 Executive Context & Distribution Model
-**VietDist Corporation** is a nationwide Fast-Moving Consumer Goods (FMCG) enterprise in Vietnam distributing food, beverage, and personal care products. The company operates two commercial channels:
-* **Direct Sales Force (D2C / Key Accounts):** 111 internal field sales representatives managing supermarkets and direct retail store replenishment across Northern, Central, and Southern regions.
-* **Indirect Distribution Network (B2B):** 138 accredited regional distributors responsible for localized warehouse inventory, wholesale bulk orders, and last-mile retail distribution.
+### 1.1 FMCG Commercial Distribution Model
+**VietDist Corporation** is a nationwide Fast-Moving Consumer Goods (FMCG) enterprise in Vietnam distributing consumer packaged goods across two distinct commercial channels:
+1. **Direct Sales Force (D2C / Key Accounts):** 111 internal field sales representatives directly managing supermarket chains, convenience stores, and key accounts across Northern, Central, and Southern sales regions.
+2. **Indirect Distribution Network (B2B):** A commercial wholesale network of 138 accredited regional distributors responsible for localized warehouse inventory, bulk order placement, and last-mile retail replenishment.
 
 ```mermaid
 flowchart LR
-    A["VietDist Manufacturing Plants"] --> B["Direct Sales Force<br/>(111 Sales Representatives)"]
+    A["VietDist Manufacturing & Central Hubs"] --> B["Direct Field Sales Force<br/>(111 Sales Representatives)"]
     A --> C["Indirect Wholesale Network<br/>(138 Regional Distributors)"]
     B --> D["Supermarkets & Direct Retailers"]
     C --> D
-    D --> E["50,000+ Completed Consumer Orders<br/>(158.96B VND Net Revenue)"]
+    D --> E["End Consumer Cash Receipts<br/>(158.96 Billion VND Net Sales)"]
 ```
 
 ---
 
-### 1.2 Verified Operational Scale & Empirical Benchmarks
-The data platform unifies **10 disparate source datasets** spanning the entire 2024 operating year. All metrics below are verified directly from production database queries:
+### 1.2 Verified Operational Scale & Empirical Data Benchmarks
+The data pipeline unifies **10 disparate source datasets** spanning the entire 2024 calendar operating year. All metrics below are verified directly from production database queries:
 
-| Metric Category | Verified Empirical Number | Data Source / Table | Analytical Context |
+| Metric Category | Verified Empirical Number | Source / Target Table | Analytical Context |
 | :--- | :---: | :---: | :--- |
-| **Total Ingested Volume** | **164,901 rows** | 10 Source Files | 20.6 MB sales CSV, multi-sheet planning XLSX, master files. |
+| **Total Ingested Volume** | **164,901 rows** | 10 Source Files | 20.6 MB sales CSV, multi-version XLSX, master records. |
 | **Direct Sales Orders** | **50,000 orders** (119,101 lines) | `schema_gold.fact_sales` | Multi-item transactions from Jan 01, 2024 to Dec 31, 2024. |
-| **Total Gross Revenue** | **163.85 Billion VND** | `schema_gold.fact_sales` | Aggregate gross sales before commercial discounts. |
-| **Promotional Discounts** | **4.89 Billion VND** | `schema_gold.fact_sales` | Trade promotional discounts applied at checkout (2.98% of gross). |
-| **Realized Net Revenue** | **158.96 Billion VND** | `schema_gold.fact_sales` | Realized net revenue across all sales channels. |
+| **Total Gross Revenue** | **163.85 Billion VND** | `schema_gold.fact_sales` | Aggregate gross sales before commercial trade discounts. |
+| **Promotional Discounts** | **4.89 Billion VND** | `schema_gold.fact_sales` | Promotional discount deductions (2.98% of gross sales). |
+| **Realized Net Revenue** | **158.96 Billion VND** | `schema_gold.fact_sales` | Net cash realized across all commercial channels. |
 | **Target Quota vs Actual** | **157.65B vs 290.74B VND** | `schema_gold.mart_sales_vs_target` | **51.19%** attainment across 1,332 sales rep-month records. |
 | **Distributor Wholesale Orders**| **8,000 orders** | `schema_gold.mart_distributor_performance` | 9.42M units ordered vs 7.99M units delivered. |
-| **Distributor Fill Rate** | **84.63%** | `schema_gold.mart_distributor_performance` | Below 95.0% SLA benchmark, indicating fulfillment leakage. |
+| **Distributor Fill Rate** | **84.63%** | `schema_gold.mart_distributor_performance` | Below 95.0% SLA benchmark, proving fulfillment leakage. |
 | **Distributor On-Time SLA** | **40.36%** | `schema_gold.mart_distributor_performance` | Significant transit delays across regional distribution hubs. |
 | **Merchandise Returns** | **3,665 return records** | `schema_gold.fact_returns` | **1.31 Billion VND** in credit notes from breakage/expiration. |
 | **End-to-End Pipeline Runtime** | **~48.8 seconds** | `schema_gold.pipeline_logs` | Bronze: 44.4s, Silver: 3.55s, Gold: 0.85s. |
 
 ---
 
-### 1.3 Core Business & Technical Challenges
-* **Historical Data Corruption from Rep Transfers:** Sales representatives frequently transfer territories mid-year (e.g., Rep `EMP042` moved from North to South on June 1st). Overwriting employee records (SCD Type 1) retroactively alters historical reports, attributing Q1 North sales to the South.
-* **Planning Version Chaos:** Quota plans were revised twice mid-year (`v1_Original`, `v2_MidYearReview`, `v3_Q4Push`). Without version-controlled modeling, baseline auditability was lost.
+### 1.3 Core Engineering & Business Bottlenecks
+* **Historical Sales Distortion from Mid-Year Transfers:** Sales representatives frequently transfer regions mid-year (e.g., Rep `EMP042` moved from North to South on June 1st). Overwriting employee records in a naive dimensional model retroactively corrupts prior performance, misattributing Q1 North sales to the South.
+* **Planning Version Chaos:** Quota plans were revised twice mid-year (`v1_Original`, `v2_MidYearReview`, `v3_Q4Push`). Without version-controlled modeling, baseline auditability was destroyed.
 * **Distributor Logistics Blind Spot:** Management had no automated mechanism to track whether distributors fulfilled orders completely (Fill Rate) or on schedule (On-Time Delivery).
 * **Dirty Staging Records:** Raw files contained 51.75% missing tax codes in customer profiles, irregular phone formats, and duplicate transaction lines from re-transmissions.
 
 ---
 
-## 🔄 2. Step-by-Step Data Pipeline Methodology & Empirical Evidence
+## 🔄 2. Step-by-Step Data Pipeline Methodology & Empirical Proof
 
 The data pipeline follows a **5-step engineering methodology** built upon the **Medallion Data Lakehouse Architecture**.
 
@@ -94,7 +96,7 @@ flowchart LR
     A["Step 1: Architecture Blueprint<br/>(Medallion Lakehouse)"] --> B["Step 2: Bronze Ingestion<br/>(Chunking & Profiling)"]
     B --> C["Step 3: Silver Conformance<br/>(Cleansing & Dedup)"]
     C --> D["Step 4: Gold Modeling<br/>(Kimball Star & SCD2)"]
-    D --> E["Step 5: Orchestration & BI<br/>(Fail-Fast & Power BI)"]
+    D --> E["Step 5: Orchestration & BI<br/>(Fail-Fast & Marts)"]
 ```
 
 ---
@@ -115,12 +117,12 @@ Designed and implemented a 3-tier schema architecture in PostgreSQL to decouple 
 * **Audit Lineage:** Every record across all layers carries audit metadata (`_batch_id`, `_ingested_at`, `_source_file`).
 
 #### 3. Empirical Verification:
-* Verified **3 dedicated schemas** initialized via [init_db.sql](file:///C:/Users/admin/Desktop/Xuân%20Thu/Da_Portfolio/03_Python/medallion-datapipeline/init_db.sql).
+* Verified **3 dedicated schemas** initialized via `init_db.sql`.
 * Total execution time across all 3 tiers is **~48.8 seconds**, proving high processing efficiency.
 
 ---
 
-### Step 2: Bronze Layer — Ingestion Engine & Data Profiling
+### Step 2: Bronze Layer — Ingestion Engine & Automated Profiling
 
 ![Step 2: Bronze Ingestion & Profiling](assets/pipeline/step_2_bronze_ingestion_profiling.png)
 
@@ -169,7 +171,9 @@ Executed 10 declarative SQL scripts (`silver/*.sql`) in `schema_silver` to trans
 * Cleaned **119,101 unique sales transaction lines** across **50,000 distinct orders**.
 * Verified **0 duplicate composite keys**:
   ```sql
-  SELECT order_id, product_id, COUNT(*) FROM schema_silver.sales_transactions GROUP BY 1,2 HAVING COUNT(*) > 1;
+  SELECT order_id, product_id, COUNT(*) 
+  FROM schema_silver.sales_transactions 
+  GROUP BY 1,2 HAVING COUNT(*) > 1;
   -- Result: 0 rows (Passed ✅)
   ```
 * Verified **0 invalid net revenue anomalies** (`net_amount > gross_amount` = 0 rows).
@@ -177,7 +181,7 @@ Executed 10 declarative SQL scripts (`silver/*.sql`) in `schema_silver` to trans
 
 ---
 
-### Step 4: Gold Layer — Kimball Star Schema, SCD2 & Data Marts
+### Step 4: Gold Layer — Kimball Star Schema, SCD2 & Analytical Marts
 
 ![Step 4: Gold Kimball & SCD2](assets/pipeline/step_4_gold_kimball_scd2.png)
 
@@ -201,7 +205,7 @@ Engineered the dimensional warehouse in `schema_gold` according to the Kimball S
 
 ---
 
-### Step 5: Orchestration Engine, Observability & Analytics Delivery
+### Step 5: Pipeline Orchestration, Observability & BI Readiness
 
 ![Step 5: Orchestration & Analytics](assets/pipeline/step_5_orchestration_analytics.png)
 
@@ -210,20 +214,21 @@ Engineered the dimensional warehouse in `schema_gold` according to the Kimball S
   * If Bronze experiences a single source failure, it logs the error to `ingest_log` and continues remaining sources.
   * If Silver staging fails, the pipeline **halts immediately** to prevent corrupted staging data from flowing into Gold.
 * Recorded execution telemetry under a unique `UUID batch_id` in `schema_gold.pipeline_logs`.
-* Connected the Gold schema directly to Power BI (`VietDist_Corporation.pbix`) for executive reporting.
+* Exposed pre-aggregated, index-optimized data marts (`mart_sales_vs_target`, `mart_distributor_performance`) ready for instant connection by any BI reporting platform.
 
 #### 2. Why it matters:
-* Prevents silent pipeline failures and protects production dashboards from displaying invalid data.
+* Prevents silent pipeline failures and protects production reports from displaying invalid data.
 * Provides full operational transparency: engineers can inspect execution times and error messages in a single query.
+* Curated data marts eliminate heavy multi-table joins for downstream business intelligence tools.
 
 #### 3. Empirical Data Evidence:
 * 48 logged pipeline runs recorded in `schema_gold.pipeline_logs`.
 * Verified Fail-Fast gate stops execution within **< 10ms** upon SQL syntax or integrity violation.
-* Power BI queries against Gold data marts execute in **< 300ms**, delivering sub-second interactive dashboard filtering.
+* Direct queries against Gold data marts return in **< 300ms**, delivering high-performance response times.
 
 ---
 
-## 🏛️ 3. Data Architecture & Dimensional Modeling
+## 🏛️ 3. Kimball Dimensional Modeling & Data Architecture
 
 ### 3.1 Kimball Star Schema Architecture
 
@@ -443,7 +448,7 @@ WHERE rn = 1;
 
 ---
 
-### 4.3 Point-in-Time (AS-OF) Historical Joins
+### 4.3 Point-in-Time (AS-OF) Historical Joins for SCD2
 ```sql
 -- gold/fact_sales.sql (Extract)
 CREATE TABLE schema_gold.fact_sales AS
@@ -515,18 +520,18 @@ def main():
 
 ---
 
-## 📈 5. Business Impact & Quantified Analytical Findings
+## 📈 5. Quantified Business Findings & Analytical Mart Verification
 
-All analytical findings below are derived directly from the Gold data marts:
+All analytical findings below are derived directly from verified database queries on the Gold data marts:
 
 1. **Severe Quota Over-Optimism in Commercial Planning:**
-   * **Evidence:** Total Actual Revenue reached **157.65 Billion VND** against an aggressive Target Quota of **290.74 Billion VND**, yielding an average attainment of **51.19%**.
+   * **Empirical Proof:** Total Actual Revenue reached **157.65 Billion VND** against an aggressive Target Quota of **290.74 Billion VND**, yielding an average attainment of **51.19%** across 111 sales representatives.
    * **Business Impact:** Initial budget targets were set unrealistically high without accounting for regional demand variations, distorting sales team incentive structures.
 2. **Distributor Logistics Bottlenecks & SLA Breaches:**
-   * **Evidence:** Across 8,000 wholesale orders, the average **Fill Rate was 84.63%** (vs. 95% target), and the average **On-Time Delivery Rate was 40.36%** (vs. 90% SLA target).
+   * **Empirical Proof:** Across 8,000 wholesale orders in `mart_distributor_performance`, the average **Fill Rate was 84.63%** (vs. 95% target), and the average **On-Time Delivery Rate was 40.36%** (vs. 90% SLA target).
    * **Business Impact:** Chronic dispatch delays and stockouts at regional distributor warehouses directly constrained direct retail store sales.
 3. **Product Return Leakage:**
-   * **Evidence:** Product returns accounted for **3,665 credit notes totaling 1.31 Billion VND** in refunds.
+   * **Empirical Proof:** Product returns accounted for **3,665 credit notes totaling 1.31 Billion VND** in refunds.
    * **Business Impact:** Goods returned due to transit breakage or shelf-life expiry eroded gross margin by **0.82%**.
 
 ---
@@ -590,8 +595,7 @@ medallion-datapipeline/
 ├── init_db.sql                   # Database initialization script (Schemas & Logs)
 ├── main.py                       # Master Pipeline Orchestrator (Fail-Fast execution)
 ├── Profiling_Report.xlsx         # Exported data profiling audit report
-├── requirements.txt              # Python production dependencies
-└── VietDist_Corporation.pbix     # Power BI executive dashboard asset
+└── requirements.txt              # Python production dependencies
 ```
 
 ---
@@ -645,7 +649,7 @@ FROM schema_gold.mart_sales_vs_target GROUP BY year, month ORDER BY year, month;
 
 * **Author:** **Nguyễn Xuân Thu**
 * **Role:** Data Analyst / Analytics Engineer
-* **Specialization:** End-to-End Data Pipelines, Medallion Architecture, Kimball Dimensional Modeling (SCD2), PostgreSQL, Power BI
+* **Specialization:** End-to-End Data Pipelines, Medallion Architecture, Kimball Dimensional Modeling (SCD2), PostgreSQL Data Warehousing
 * **Email:** [thu.nx280@gmail.com](mailto:thu.nx280@gmail.com)
 * **LinkedIn:** [https://linkedin.com/](https://linkedin.com/)
 * **GitHub:** [https://github.com/thunx280-ctrl](https://github.com/thunx280-ctrl)

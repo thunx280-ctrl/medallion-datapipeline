@@ -88,7 +88,7 @@ def generate_step_1(output_path):
             "• Pre-aggregated Business Data Marts:",
             "  - mart_sales_vs_target (KPI %)",
             "  - mart_distributor_performance (Fill Rate)",
-            "• Feeds Power BI Executive Dashboard"
+            "• Analytics-Ready for Downstream BI"
         ], '#10b981', 73)
     ]
 
@@ -330,7 +330,7 @@ def generate_step_4(output_path):
 def generate_step_5(output_path):
     fig, ax = base_canvas("DATA PIPELINE • STEP 05",
                           "Step 5: Orchestration Engine, Observability & Analytics Delivery",
-                          "Production Reliability: Fail-Fast inter-stage gates, UUID batch logging, automated tests, and Power BI dashboard integration",
+                          "Production Reliability: Fail-Fast inter-stage gates, UUID batch logging, automated tests, and BI-ready data marts",
                           badge_color='#7c3aed')
 
     # Left: Orchestrator Architecture & Logging
@@ -358,37 +358,37 @@ def generate_step_5(output_path):
         ax.text(7.0, oy - 5.8, desc, color='#cbd5e1', fontsize=8.4, ha='left', va='center')
         oy -= 9.8
 
-    # Right: Analytics Delivery & Power BI
+    # Right: Analytics Delivery & BI-Ready Data Marts
     b2 = patches.FancyBboxPatch((52, 23), 44, 53, boxstyle="round,pad=0.6", facecolor='#131e36', edgecolor='#1e293b', linewidth=1.5)
     ax.add_patch(b2)
     h2 = patches.FancyBboxPatch((52.5, 68.5), 43, 6.8, boxstyle="round,pad=0.3", facecolor='#4f46e5', edgecolor='#818cf8', linewidth=1.2)
     ax.add_patch(h2)
-    ax.text(74.0, 71.9, "EXECUTIVE ANALYTICS DELIVERY & POWER BI INTEGRATION", color='#ffffff', fontsize=12.0, fontweight='bold', ha='center', va='center')
+    ax.text(74.0, 71.9, "EXECUTIVE ANALYTICS DATA MARTS & BI READINESS", color='#ffffff', fontsize=12.0, fontweight='bold', ha='center', va='center')
 
     bi_cards = [
-        ("Direct PostgreSQL Warehouse Connection", [
-            "• Power BI connects directly to schema_gold via PostgreSQL connector.",
-            "• Direct access to pre-aggregated marts minimizes visual latency.",
-            "• Enforces single source of truth across all enterprise analytics.",
-            "• Data model mirrors Kimball Star Schema relationships."
+        ("Curated PostgreSQL Data Marts", [
+            "• Direct analytical access via pre-aggregated schema_gold data marts.",
+            "• Minimizes visual query latency for downstream BI tools (Power BI, Tableau).",
+            "• Enforces single source of truth across all commercial KPIs.",
+            "• Data model strictly mirrors conformed Kimball Star Schema."
         ], 53.5, 47.0),
-        ("Sales vs Target Attainment Cockpit", [
-            "• Slices achievement % by Sales Representative, Team, and Region.",
-            "• Dynamic color-coded thresholds: Red (<80%), Amber (80-99%), Green (>=100%).",
+        ("Sales vs Target Attainment Mart", [
+            "• Aggregates actual net revenue, target quota, gap, and achievement %.",
+            "• Evaluates 1,332 monthly records across 111 sales representatives.",
             "• Tracks variance deltas between v1 Original budget and v2 Mid-Year updates.",
-            "• Empowers regional directors to reallocate sales quotas proactively."
+            "• Seamlessly joins fact_sales, fact_targets, and fact_returns."
         ], 74.5, 47.0),
-        ("Distributor Logistics SLA Monitor", [
-            "• Ranks 138 distributors by Fill Rate % and On-Time Delivery Rate %.",
-            "• Pinpoints regional logistics bottlenecks and delivery delay clusters.",
-            "• Provides objective performance data to negotiate distributor SLA contracts.",
-            "• Traces order lead times from order placement to final warehouse delivery."
+        ("Distributor Logistics SLA Mart", [
+            "• Tracks 1,480 monthly records across 125 active distributors.",
+            "• Computes Fill Rate % = (Delivered Qty / Ordered Qty) * 100.",
+            "• Computes On-Time Delivery Rate % = (On-Time / Total Shipments) * 100.",
+            "• Exposes regional logistics bottlenecks and delivery delay clusters."
         ], 53.5, 25.0),
-        ("Product Return & Net Revenue Analysis", [
+        ("Product Return & Net Margin Audit", [
             "• Evaluates gross vs net sales margin erosion from returns and discounts.",
-            "• Categorizes return reasons (Damaged in transit vs Expired batch).",
-            "• Correlates return rates with distributor delivery performance.",
-            "• Recommends packaging enhancements for high-return product categories."
+            "• Connects return reasons (Damaged in transit vs Expired batch) to SKUs.",
+            "• Verified total product returns: 1.31 Billion VND across 3,665 lines.",
+            "• Delivers audited financial foundations for executive reporting."
         ], 74.5, 25.0)
     ]
     for b_title, bullets, bx, by in bi_cards:
@@ -403,8 +403,8 @@ def generate_step_5(output_path):
     # Bottom Strip
     f = patches.FancyBboxPatch((4, 4), 92, 14.5, boxstyle="round,pad=0.5", facecolor='#1e293b', edgecolor='#7c3aed', linewidth=1.2)
     ax.add_patch(f)
-    ax.text(6, 15.0, "ENTERPRISE ANALYTICS ENGINEERING MATURITY:", color='#c084fc', fontsize=11.5, fontweight='bold', ha='left')
-    ax.text(6, 10.5, "• Operational Resiliency: Fail-fast gates and independent source logging guarantee that data pipeline failures never corrupt the data warehouse.\n• End-to-End Lineage: Any business metric in Power BI can be traced back through Gold facts, Silver SQL, and Bronze raw logs to the exact source row.\n• Decision Support: Transforms 150,000+ raw transactional records into actionable C-suite insights on sales performance and distributor fulfillment.", 
+    ax.text(6, 15.0, "ENTERPRISE ANALYTICS ENGINEERING MATURITY & BI READINESS:", color='#c084fc', fontsize=11.5, fontweight='bold', ha='left')
+    ax.text(6, 10.5, "• BI Consumption Readiness: Curated Gold data marts eliminate heavy joins, enabling instant connection for downstream BI tools.\n• Operational Resiliency: Fail-fast gates and independent source logging guarantee that data pipeline failures never corrupt the data warehouse.\n• End-to-End Lineage: Any business metric in Gold can be traced back through Silver SQL transformations and Bronze raw logs to the exact source row.", 
             color='#f1f5f9', fontsize=9.8, ha='left', va='center')
 
     save_and_close(fig, output_path)
