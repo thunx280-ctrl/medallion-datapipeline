@@ -1,159 +1,367 @@
-# Data Dictionary — Analytics Platform
+# 📖 Enterprise Data Dictionary — VietDist Analytics Platform
 
-Tài liệu này mô tả toàn bộ dữ liệu trong pipeline: nguồn gốc, ý nghĩa nghiệp vụ, và cấu trúc từng bảng ở 3 layer Bronze → Silver → Gold. Đọc tài liệu này trước khi viết SQL/DAX mới, hoặc khi cần giải thích project cho người khác (phỏng vấn, review portfolio).
-
----
-
-## 1. Bối cảnh nghiệp vụ (Business Context)
-
-**Công ty**: VietDist Corporation — công ty phân phối FMCG (hàng tiêu dùng nhanh) giả định, hoạt động qua 2 kênh chính: bán trực tiếp (Sales) và qua nhà phân phối (Distributor).
-
-**Mục tiêu platform**: xây dựng nền tảng phân tích Sales Performance & Distribution để trả lời các câu hỏi nghiệp vụ:
-- Doanh thu thực tế so với chỉ tiêu (target) theo từng nhân viên, từng tháng, từng vùng như thế nào?
-- Nhà phân phối nào giao hàng đúng hẹn/đủ số lượng tốt nhất (fill rate, on-time delivery)?
-- Tỷ lệ trả hàng (return rate) theo sản phẩm/khách hàng/nhân viên ra sao?
-- Khi nhân viên đổi vùng phụ trách giữa năm, doanh số các giai đoạn trước/sau có bị gán sai không? (đây là lý do bắt buộc dùng SCD Type 2)
-
-**Đối tượng sử dụng dữ liệu**: Intern/Junior Analytics Engineer (bản thân project), và các stakeholder dùng Power BI dashboard xây trên `schema_gold`.
+> **Comprehensive Technical & Business Data Catalog across the 3-Tier Medallion Architecture (Bronze → Silver → Gold) for VietDist Corporation.**  
+> *Designed for Data Analysts, Analytics Engineers, and Technical Interview Reviewers.*
 
 ---
 
-## 2. Nguồn dữ liệu (10 nguồn → Bronze layer)
-
-| # | Nguồn | Định dạng | Mô tả nghiệp vụ | Bảng Bronze |
-|---|---|---|---|---|
-| 1 | Sales transactions | CSV | Đơn hàng bán trực tiếp cho khách hàng, ~119K dòng, **grain = 1 dòng sản phẩm/đơn** (1 đơn có nhiều sản phẩm) | `sales_transactions` |
-| 2 | Sales target plan | XLSX | Chỉ tiêu doanh số giao cho từng nhân viên theo tháng. **Nhiều phiên bản** (v1, v2, v3...) do điều chỉnh giữa năm — mỗi version là 1 sheet riêng, không bao giờ ghi đè | `sales_targets_raw` |
-| 3 | Customer master | CSV | Danh sách 2.000 khách hàng mua trực tiếp | `customers` |
-| 4 | Product master | XLSX | Danh mục 100 sản phẩm (SKU) | `products` |
-| 5 | Distributor orders | XLSX/XLSB | Đơn đặt hàng của nhà phân phối với công ty, ~36K dòng, grain = 1 dòng sản phẩm/đơn | `distributor_orders` |
-| 6 | Distributor master | CSV | Danh sách 138 nhà phân phối | `distributors` |
-| 7 | Employee master | XLSX | Nhân viên kinh doanh, **có lịch sử đổi vùng/team** (cột `effective_date`, `transfer_note`) | `employees` |
-| 8 | Territory mapping | XLSX | Ánh xạ nhân viên nào phụ trách khách hàng nào theo từng thời kỳ | `territory_mapping` |
-| 9 | Return transactions | CSV | Giao dịch trả hàng, 3.665 dòng | `return_transactions` |
-| 10 | Promotion program | XLSX | Chương trình khuyến mãi, áp dụng cho **nhiều sản phẩm** (danh sách product_id ngăn cách bởi `\|`) | `promotion_program` |
-
-**Quy tắc Bronze**: mọi cột đều lưu dạng `TEXT` (giữ nguyên bản gốc, không xử lý), `append`-only (không ghi đè), kèm 4 cột metadata: `_source_file`, `_source_platform`, `_ingested_at`, `_batch_id`.
+## 📌 Table of Contents
+1. [Architecture & Naming Conventions](#1-architecture--naming-conventions)
+2. [Bronze Layer — Raw Ingestion (`schema_bronze`)](#2-bronze-layer--raw-ingestion-schema_bronze)
+3. [Silver Layer — Cleansed Staging (`schema_silver`)](#3-silver-layer--cleansed-staging-schema_silver)
+4. [Gold Layer — Kimball Star Schema Dimensions (`schema_gold`)](#4-gold-layer--kimball-star-schema-dimensions-schema_gold)
+5. [Gold Layer — Fact Tables (`schema_gold`)](#5-gold-layer--fact-tables-schema_gold)
+6. [Gold Layer — Ready-to-Serve Data Marts (`schema_gold`)](#6-gold-layer--ready-to-serve-data-marts-schema_gold)
+7. [Business Metrics Formula Glossary](#7-business-metrics-formula-glossary)
+8. [End-to-End Lineage Matrix](#8-end-to-end-lineage-matrix)
 
 ---
 
-## 3. Silver layer — dữ liệu đã làm sạch
+## 1. Architecture & Naming Conventions
 
-Mỗi bảng Silver là bản Bronze tương ứng đã: loại trùng lặp (`ROW_NUMBER()`), chuẩn hoá text (`TRIM`, `UPPER`/`INITCAP`), ép kiểu đúng (`DATE`, `NUMERIC`). Tên bảng: `silver_<tên_nguồn>` (10 bảng + 1 bảng cầu nối `stg_promotion_products` tách danh sách sản phẩm khuyến mãi thành quan hệ nhiều-nhiều chuẩn).
+The platform adopts the **Medallion Data Lakehouse Architecture** to cleanly decouple raw ingestion from business-grade reporting:
 
-**2 điểm nghiệp vụ quan trọng phát hiện qua profiling**:
-- `sales_transactions` và `distributor_orders`: **khoá dedup là `(order_id, product_id)`**, không phải `order_id` — vì 1 đơn có nhiều dòng sản phẩm.
-- `customers.tax_code` null ~52% — **bình thường** (khách cá nhân không có mã số thuế, chỉ doanh nghiệp mới có), Silver giữ NULL thật, không điền giá trị mặc định.
+```mermaid
+flowchart LR
+    subgraph Bronze["🥉 Bronze (Raw)"]
+        B1["Raw Source Files<br/>(CSV / XLSX)"] --> B2["Append-Only Tables<br/>(Preserve Source Grain)"]
+    end
+    subgraph Silver["🥈 Silver (Cleaned)"]
+        B2 --> S1["Type Casting & Standardization"]
+        S1 --> S2["Deduplication & Cleansing"]
+    end
+    subgraph Gold["🥇 Gold (Curated)"]
+        S2 --> G1["Kimball Conformed Dims<br/>(Surrogate Keys & SCD2)"]
+        S2 --> G2["Fact Tables & Point-in-Time Joins"]
+        G1 & G2 --> G3["Business Data Marts (BI Ready)"]
+    end
+```
 
----
-
-## 4. Gold layer — Star Schema
-
-### 4.1 Dimension tables
-
-#### `dim_date` — không phụ thuộc nguồn nào, sinh bằng `generate_series()`
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `date_id` (PK) | INT | Khoá chính dạng `YYYYMMDD` (vd `20240315`) |
-| `full_date` | DATE | Ngày đầy đủ |
-| `year`, `quarter`, `month`, `day` | INT | Thành phần ngày |
-| `week_of_year`, `day_of_week` | INT | Tuần trong năm, thứ trong tuần (ISO: T2=1...CN=7) |
-| `day_name`, `month_name` | TEXT | Tên thứ/tháng |
-| `year_month`, `year_quarter` | TEXT | Nhãn gộp tiện `GROUP BY` (vd "2024-03", "Q1-2024") |
-| `is_weekend` | BOOLEAN | Thứ 7/Chủ nhật |
-| `is_first_day_of_month`, `is_last_day_of_month` | BOOLEAN | Cờ đầu/cuối tháng |
-
-#### `dim_customers` — **SCD Type 1** (ghi đè, không giữ lịch sử)
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `customer_sk` (PK) | INT | Surrogate key — fact table join qua cột này |
-| `customer_id` (business key) | TEXT | Mã khách hàng gốc từ nguồn |
-| `customer_name`, `customer_type`, `channel`, `province`, `region`, `address`, `phone` | TEXT | Thông tin khách hàng |
-| `tax_code` | TEXT | Mã số thuế — **NULL hợp lệ** với khách cá nhân |
-| `join_date` | DATE | Ngày trở thành khách hàng |
-| `credit_limit` | NUMERIC | Hạn mức tín dụng |
-| `status` | TEXT | Active/Inactive |
-
-#### `dim_products` — **SCD Type 1**
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `product_sk` (PK) | INT | Surrogate key |
-| `product_id` (business key) | TEXT | Mã sản phẩm gốc |
-| `product_name`, `category`, `sub_category`, `unit` | TEXT | Thông tin mô tả |
-| `unit_price`, `cost_price` | NUMERIC | Giá bán / giá vốn |
-| `weight_gram` | NUMERIC | Trọng lượng |
-| `status`, `launch_date` | TEXT / DATE | Trạng thái, ngày ra mắt |
-
-#### `dim_employees` — **SCD Type 2** (giữ lịch sử khi đổi vùng/team/chức vụ)
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `employee_sk` (PK) | INT | Surrogate key — **1 employee_id có thể có nhiều dòng** (nhiều version) |
-| `employee_id` (business key) | TEXT | Mã nhân viên gốc — **KHÔNG unique** ở bảng này |
-| `full_name`, `gender`, `date_of_birth`, `join_date`, `email`, `phone` | — | Thông tin cá nhân (không kích hoạt version mới nếu đổi) |
-| `position`, `region`, `team`, `status` | TEXT | **Cột được theo dõi SCD2** — đổi 1 trong 4 cột này → tạo version mới |
-| `effective_date` | DATE | Ngày version này bắt đầu hiệu lực |
-| `expiry_date` | DATE | Ngày version này hết hiệu lực (`NULL` = đang hiệu lực) |
-| `is_current` | BOOLEAN | `TRUE` = bản ghi hiện hành |
-
-#### `dim_distributors` — **SCD Type 2** (theo dõi `tier`, `region`, `status`, `assigned_supervisor_id`)
-Cấu trúc tương tự `dim_employees`, thêm: `tier`, `channel`, `province`, `contact_person`, `tax_code`, `credit_limit`, `assigned_supervisor_id`.
+### Key Conventions:
+* `_sk` (Surrogate Key): Synthetic primary key generated at Gold layer (`BIGSERIAL` or `ROW_NUMBER()`).
+* `_id` (Natural/Business Key): Unique operational identifier originating from source systems.
+* `_loaded_at` / `_ingested_at`: Audit timestamp indicating when a record was processed.
+* `_batch_id`: UUID tracking each unique execution of the master pipeline (`main.py`).
 
 ---
 
-### 4.2 Fact tables
+## 2. Bronze Layer — Raw Ingestion (`schema_bronze`)
 
-#### `fact_sales` — grain: 1 dòng sản phẩm trong 1 đơn hàng (`order_id`, `product_id`)
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `order_id`, `product_id` | TEXT | Degenerate dimension (giữ nguyên, không tách bảng riêng) |
-| `date_id`, `customer_sk`, `product_sk`, `employee_sk` | INT (FK) | Khoá join tới dimension — `employee_sk` join **point-in-time** theo `order_date` |
-| `channel`, `region`, `province`, `delivery_status`, `payment_method`, `payment_status` | TEXT | Thuộc tính lọc nhanh |
-| `quantity`, `unit_price`, `discount_pct`, `discount_amount`, `gross_amount`, `net_amount` | NUMERIC | **Measures** — `net_amount` là doanh thu thực nhận sau chiết khấu |
+All tables in Bronze preserve the original schema and grain. Non-destructive types (`TEXT`) are utilized to ensure ingestion resilience.
 
-#### `fact_targets` — grain: 1 nhân viên - 1 tháng - 1 **version kế hoạch**
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `plan_version`, `version_date`, `effective_from`, `effective_to` | — | Thông tin version — **mọi version đều giữ lại**, không lọc bản mới nhất ở đây |
-| `date_id` | INT | Ngày đầu tháng của kỳ target (vd tháng 3/2024 → `20240301`) |
-| `employee_sk` | INT (FK) | Join point-in-time theo `effective_from` |
-| `target_revenue`, `target_quantity`, `target_new_customers` | NUMERIC | Measures (chỉ tiêu) |
+### 2.1 Ingestion Metadata & Log Tables
 
-#### `fact_returns` — grain: 1 `return_id`
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `return_id`, `original_order_id` | TEXT | Định danh |
-| `date_id`, `customer_sk`, `product_sk`, `employee_sk` | INT (FK) | Join point-in-time theo `return_date` |
-| `return_reason`, `status` | TEXT | Lý do trả, trạng thái xử lý |
-| `return_quantity`, `unit_price`, `return_amount` | NUMERIC | Measures |
+#### Table: `schema_bronze.ingest_log`
+* **Grain:** 1 record per ingestion event per source file.
+* **Purpose:** Audit tracking for data pipeline observability and SLA monitoring.
 
----
+| Column | Data Type | Nullable | Description |
+| :--- | :--- | :---: | :--- |
+| `log_id` | `BIGSERIAL` | No | Primary Key. Synthetic log identifier. |
+| `batch_id` | `UUID` | No | Unique identifier generated per pipeline run in `main.py`. |
+| `source_name` | `TEXT` | No | Identifier of the data source (e.g., `sales_transactions`, `customers`). |
+| `source_file` | `TEXT` | No | Name of the source file (e.g., `SRC01_sales_transactions.csv`). |
+| `source_platform` | `TEXT` | No | Origin storage platform (`local_filesystem`, `google_drive`, `onedrive`). |
+| `rows_loaded` | `INTEGER` | Yes | Number of rows extracted and successfully inserted. |
+| `status` | `TEXT` | No | Pipeline status flag: `SUCCESS` or `FAILED`. |
+| `error_message` | `TEXT` | Yes | Captured stack trace / error description if failed. |
+| `duration_sec` | `NUMERIC(10,2)` | Yes | Total execution time in seconds. |
+| `started_at` | `TIMESTAMP` | No | Ingestion start timestamp (`DEFAULT NOW()`). |
+| `finished_at` | `TIMESTAMP` | Yes | Ingestion completion timestamp. |
 
-### 4.3 Mart tables (tổng hợp sẵn cho BI)
+#### Table: `schema_bronze.profiling_summary`
+* **Grain:** 1 record per column per ingested Bronze table.
+* **Purpose:** Automated data profiling telemetry generated by `loader/profilling.py`.
 
-#### `mart_sales_vs_target` — grain: 1 nhân viên - 1 tháng
-So sánh doanh thu thực tế (đã trừ trả hàng) với chỉ tiêu — **chỉ lấy version target mới nhất** cho mỗi nhân viên-tháng (chọn qua `ROW_NUMBER()` theo `version_date`).
-
-| Cột | Ý nghĩa |
-|---|---|
-| `target_revenue` | Chỉ tiêu doanh thu (version mới nhất) |
-| `gross_actual_revenue` | Doanh thu bán hàng thô (từ `fact_sales`, chưa trừ trả hàng) |
-| `actual_return_amount` | Tổng giá trị trả hàng trong kỳ (từ `fact_returns`) |
-| `actual_revenue` | **= `gross_actual_revenue` − `actual_return_amount`** (doanh thu ròng, dùng để đánh giá KPI) |
-| `revenue_gap` | `actual_revenue` − `target_revenue` |
-| `revenue_achievement_pct` | `actual_revenue` / `target_revenue` × 100 |
-
-#### `mart_distributor_performance` — grain: 1 nhà phân phối - 1 tháng
-| Cột | Ý nghĩa |
-|---|---|
-| `total_orders` | Số đơn đặt hàng |
-| `total_qty_ordered` / `total_qty_delivered` | Số lượng đặt / đã giao |
-| `avg_fill_rate_pct` | % giao đủ hàng trung bình (thang 0-100, cần chia 100 khi làm DAX `%`) |
-| `ontime_delivery_rate_pct` | % giao đúng hẹn (thang 0-100) |
+| Column | Data Type | Nullable | Description |
+| :--- | :--- | :---: | :--- |
+| `id` | `BIGSERIAL` | No | Primary Key. |
+| `table_name` | `TEXT` | No | Target Bronze table evaluated. |
+| `column_name` | `TEXT` | No | Column name inspected. |
+| `dtype` | `TEXT` | Yes | Inferred Pandas/SQL data type. |
+| `total_rows` | `INTEGER` | Yes | Total record count of the table. |
+| `null_count` | `INTEGER` | Yes | Count of missing/null values in this column. |
+| `null_pct` | `NUMERIC(5,2)` | Yes | Percentage of nulls (`null_count / total_rows * 100`). |
+| `distinct_count`| `INTEGER` | Yes | Count of unique non-null values. |
+| `profiled_at` | `TIMESTAMP` | No | Profiling execution timestamp. |
 
 ---
 
-## 5. Quy ước đặt tên & khoá
+## 3. Silver Layer — Cleansed Staging (`schema_silver`)
 
-- **Surrogate key** (`*_sk`): số nguyên tự sinh, dùng để fact/mart JOIN dimension — áp dụng nhất quán cho **mọi** dimension (kể cả SCD1) để toàn schema có cách join giống nhau.
-- **Business key** (`*_id`): mã gốc từ hệ thống nguồn — **không unique** ở dimension SCD2 (1 business key có nhiều dòng lịch sử).
-- **Point-in-time join**: mọi fact join dimension SCD2 theo điều kiện `transaction_date BETWEEN effective_date AND expiry_date`, **không** theo `is_current = TRUE` — đảm bảo giao dịch quá khứ luôn gán đúng phiên bản dimension tại thời điểm đó.
+In the Silver layer, data is validated, deduplicated, cast into correct types, and normalized for analytics.
+
+### 3.1 `schema_silver.sales_transactions`
+* **Source:** `schema_bronze.sales_transactions` (from `SRC01`)
+* **Grain:** 1 line item per order (`order_id`, `product_id`).
+* **Transformations:**
+  * Deduplicated via composite key `(order_id, product_id, order_date)`.
+  * Standardized `order_date` to `DATE`.
+  * Computed `gross_amount = quantity * unit_price`.
+  * Computed `discount_amount = gross_amount * (discount_pct / 100.0)`.
+  * Computed `net_amount = gross_amount - discount_amount`.
+  * Normalized string casing on `channel`, `delivery_status`, `payment_status`.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `order_id` | `TEXT` | PK Component | Natural order number. |
+| `product_id` | `TEXT` | PK Component | Natural SKU identifier. |
+| `order_date` | `DATE` | - | Date transaction took place (`YYYY-MM-DD`). |
+| `customer_id` | `TEXT` | FK | Customer natural key. |
+| `employee_id` | `TEXT` | FK | Sales representative natural key. |
+| `channel` | `TEXT` | - | Sales channel (`DIRECT`, `ONLINE`, `RETAIL`). |
+| `region` | `TEXT` | - | Geographic sales territory (`NORTH`, `CENTRAL`, `SOUTH`). |
+| `province` | `TEXT` | - | Recipient province / city name. |
+| `delivery_status` | `TEXT` | - | Order delivery status (`DELIVERED`, `SHIPPED`, `CANCELLED`). |
+| `payment_method` | `TEXT` | - | Payment mechanism (`BANK_TRANSFER`, `COD`, `CREDIT`). |
+| `payment_status` | `TEXT` | - | Payment state (`PAID`, `PENDING`). |
+| `quantity` | `INTEGER` | - | Units sold. |
+| `unit_price` | `NUMERIC(15,2)` | - | List price per unit (VND). |
+| `discount_pct` | `NUMERIC(5,2)` | - | Applied discount percentage (0 - 100). |
+| `discount_amount` | `NUMERIC(15,2)` | - | Monetary value of discount. |
+| `gross_amount` | `NUMERIC(15,2)` | - | Pre-discount sales total. |
+| `net_amount` | `NUMERIC(15,2)` | - | Net revenue realized post-discount. |
+| `_cleaned_at` | `TIMESTAMP` | - | Cleansing execution timestamp. |
+
+### 3.2 `schema_silver.sales_targets`
+* **Source:** `schema_bronze.sales_targets_raw` (from `SRC02`)
+* **Grain:** 1 target line per employee per month per plan version.
+* **Transformations:** Filtered invalid employee records, standardized numeric budget targets, preserved plan version tags.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `plan_version` | `TEXT` | PK Component | Target version (`v1_Original`, `v2_MidYearReview`, `v3_Final`). |
+| `version_date` | `DATE` | - | Effective date of target release. |
+| `employee_id` | `TEXT` | PK Component | Sales rep natural key. |
+| `employee_name` | `TEXT` | - | Full name of sales rep. |
+| `region` | `TEXT` | - | Territory assigned for this plan version. |
+| `team` | `TEXT` | - | Assigned sales team. |
+| `year` | `INTEGER` | PK Component | Target fiscal year (e.g., 2023). |
+| `month` | `INTEGER` | PK Component | Target fiscal month (1 - 12). |
+| `target_revenue` | `NUMERIC(18,2)` | - | Targeted monthly sales revenue (VND). |
+| `target_quantity` | `INTEGER` | - | Targeted monthly sales unit volume. |
+| `target_new_customers`| `INTEGER` | - | Targeted new customer acquisition count. |
+
+### 3.3 `schema_silver.distributor_orders`
+* **Source:** `schema_bronze.distributor_orders` (from `SRC05`)
+* **Grain:** 1 line item per B2B distributor purchase order.
+* **Transformations:** Parsed delivery dates, calculated `fill_rate_pct = (qty_delivered / qty_ordered) * 100`, parsed `ontime_delivery` into boolean format.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `order_id` | `TEXT` | PK Component | Distributor purchase order number. |
+| `product_id` | `TEXT` | PK Component | Ordered SKU identifier. |
+| `order_date` | `DATE` | - | Date PO was submitted. |
+| `distributor_id` | `TEXT` | FK | Accredited distributor identifier. |
+| `delivery_date` | `DATE` | - | Physical delivery completion date. |
+| `ontime_delivery` | `TEXT` | - | SLA compliance indicator (`YES` / `NO`). |
+| `qty_ordered` | `INTEGER` | - | Units ordered by distributor. |
+| `qty_delivered` | `INTEGER` | - | Units fulfilled by warehouse. |
+| `fill_rate_pct` | `NUMERIC(5,2)` | - | Order fulfillment fill rate percentage. |
+| `gross_amount` | `NUMERIC(18,2)` | - | Total ordered value. |
+| `delivered_amount` | `NUMERIC(18,2)` | - | Value of fulfilled goods. |
+
+---
+
+## 4. Gold Layer — Kimball Star Schema Dimensions (`schema_gold`)
+
+Conformed dimensions establish standardized analytical context across enterprise fact tables.
+
+### 4.1 `schema_gold.dim_date`
+* **Type:** Conformed Date Dimension (Static Series).
+* **Generation:** Generated via `generate_series('2018-01-01'::DATE, '2025-12-31'::DATE, '1 day')`.
+* **Grain:** 1 row per calendar day.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `date_id` | `INTEGER` | PK | Integer key in `YYYYMMDD` format (e.g., `20230514`). |
+| `date` | `DATE` | Natural Key | Calendar date (`YYYY-MM-DD`). |
+| `year` | `INTEGER` | - | Calendar year (e.g., `2023`). |
+| `quarter` | `INTEGER` | - | Calendar quarter (1 - 4). |
+| `month` | `INTEGER` | - | Calendar month (1 - 12). |
+| `month_name` | `TEXT` | - | Full month name (`January` ... `December`). |
+| `week_of_year` | `INTEGER` | - | ISO week number (1 - 53). |
+| `day_of_month` | `INTEGER` | - | Day of the month (1 - 31). |
+| `day_of_week` | `INTEGER` | - | Day of week index (1 = Sunday, 7 = Saturday). |
+| `day_name` | `TEXT` | - | Day name (`Monday`, `Tuesday`...). |
+| `is_weekend` | `BOOLEAN` | - | Flag indicating Saturday/Sunday. |
+
+### 4.2 `schema_gold.dim_employees` (SCD Type 2)
+* **Type:** **Slowly Changing Dimension Type 2 (Historical Tracking)**.
+* **Grain:** 1 record per employee per version of their territory/team assignment.
+* **Purpose:** Prevents historical revenue distortion when sales reps rotate regions mid-year.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `employee_sk` | `BIGSERIAL` | PK | Surrogate Key uniquely identifying this version of the employee. |
+| `employee_id` | `TEXT` | Natural Key | Business employee ID (e.g., `EMP014`). |
+| `full_name` | `TEXT` | - | Full employee name. |
+| `gender` | `TEXT` | - | Gender. |
+| `date_of_birth` | `DATE` | - | Birth date. |
+| `join_date` | `DATE` | - | Employment commencement date. |
+| `position` | `TEXT` | Tracked SCD2 | Job title (e.g., `Senior Sales Rep`, `Area Manager`). |
+| `region` | `TEXT` | Tracked SCD2 | Assigned sales region (`NORTH`, `CENTRAL`, `SOUTH`). |
+| `team` | `TEXT` | Tracked SCD2 | Assigned sub-sales team. |
+| `email` | `TEXT` | - | Corporate contact email. |
+| `phone` | `TEXT` | - | Standardized phone number. |
+| `status` | `TEXT` | Tracked SCD2 | Employment status (`ACTIVE`, `TRANSFERRED`, `RESIGNED`). |
+| `effective_date` | `DATE` | SCD2 Window | Date this territory/role version became active. |
+| `expiry_date` | `DATE` | SCD2 Window | Date this version closed (`9999-12-31` for active record). |
+| `is_current` | `BOOLEAN` | SCD2 Flag | `TRUE` if this is the employee's currently active assignment. |
+
+### 4.3 `schema_gold.dim_customers` (SCD Type 1)
+* **Type:** Conformed Customer Dimension (SCD Type 1 - Overwrite).
+* **Grain:** 1 row per unique retail customer.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `customer_sk` | `BIGINT` | PK | Surrogate Key generated via `ROW_NUMBER()`. |
+| `customer_id` | `TEXT` | Natural Key | Source customer ID (e.g., `CUST0012`). |
+| `customer_name` | `TEXT` | - | Full name of account holder. |
+| `customer_type` | `TEXT` | - | Customer tier (`KEY_ACCOUNT`, `RETAIL`, `B2C`). |
+| `phone` | `TEXT` | - | Sanitized phone number. |
+| `email` | `TEXT` | - | Customer email address. |
+| `province` | `TEXT` | - | Registered province. |
+| `region` | `TEXT` | - | Assigned geographic region. |
+| `created_date` | `DATE` | - | Account creation date. |
+
+### 4.4 `schema_gold.dim_products` (SCD Type 1)
+* **Type:** Conformed Product Dimension (SCD Type 1).
+* **Grain:** 1 row per unique SKU.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `product_sk` | `BIGINT` | PK | Surrogate Key generated via `ROW_NUMBER()`. |
+| `product_id` | `TEXT` | Natural Key | Product SKU identifier (e.g., `SKU089`). |
+| `product_name` | `TEXT` | - | Commercial product name. |
+| `category` | `TEXT` | - | Product family (e.g., `Beverages`, `Personal Care`, `Food`). |
+| `sub_category` | `TEXT` | - | Granular sub-category classification. |
+| `brand` | `TEXT` | - | Product brand. |
+| `unit_of_measure`| `TEXT` | - | Packaging unit (`PCS`, `BOX`, `CARTON`). |
+| `standard_cost` | `NUMERIC(15,2)` | - | Baseline manufacturing cost per unit. |
+| `list_price` | `NUMERIC(15,2)` | - | Suggested retail list price. |
+
+---
+
+## 5. Gold Layer — Fact Tables (`schema_gold`)
+
+### 5.1 `schema_gold.fact_sales`
+* **Grain:** 1 line item per order (`order_id`, `product_id`).
+* **Design Pattern:** Transactional Fact Table with **Point-in-Time Join** to `dim_employees`.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `order_id` | `TEXT` | Degenerate Dim | Order tracking number. |
+| `product_id` | `TEXT` | Degenerate Dim | SKU number for audit reconciliation. |
+| `date_id` | `INTEGER` | FK | Joins `dim_date.date_id`. |
+| `customer_sk` | `BIGINT` | FK | Joins `dim_customers.customer_sk`. |
+| `product_sk` | `BIGINT` | FK | Joins `dim_products.product_sk`. |
+| `employee_sk` | `BIGINT` | FK (SCD2) | Point-in-time join to `dim_employees.employee_sk`. |
+| `channel` | `TEXT` | Degenerate Dim | Sales channel. |
+| `region` | `TEXT` | Degenerate Dim | Transaction region. |
+| `delivery_status`| `TEXT` | Degenerate Dim | Delivery fulfillment status. |
+| `payment_status` | `TEXT` | Degenerate Dim | Payment settlement status. |
+| `quantity` | `INTEGER` | Additive Measure | Unit quantity sold. |
+| `unit_price` | `NUMERIC(15,2)` | Non-additive | List price per unit. |
+| `discount_pct` | `NUMERIC(5,2)` | Non-additive | Discount rate applied. |
+| `discount_amount`| `NUMERIC(15,2)` | Additive Measure | Total discount value given. |
+| `gross_amount` | `NUMERIC(15,2)` | Additive Measure | Pre-discount transaction value. |
+| `net_amount` | `NUMERIC(15,2)` | Additive Measure | Realized revenue (`gross_amount - discount_amount`). |
+| `_loaded_at` | `TIMESTAMP` | Audit | Timestamp row was materialized into Gold. |
+
+### 5.2 `schema_gold.fact_targets`
+* **Grain:** 1 plan line per employee per month per version.
+* **Design Pattern:** Periodic Snapshot Fact Table preserving multiple planning iterations.
+
+| Column | Data Type | Key | Description |
+| :--- | :--- | :---: | :--- |
+| `plan_version` | `TEXT` | Degenerate Dim | Budget revision tag (`v1_Original`, `v2_MidYearReview`). |
+| `version_date` | `DATE` | - | Budget effective release date. |
+| `date_id` | `INTEGER` | FK | Standardized to first day of target month (`YYYYMM01`). |
+| `employee_sk` | `BIGINT` | FK (SCD2) | Joins active `dim_employees.employee_sk`. |
+| `year` | `INTEGER` | - | Target year. |
+| `month` | `INTEGER` | - | Target month. |
+| `target_revenue` | `NUMERIC(18,2)` | Additive Measure | Quota for net revenue. |
+| `target_quantity`| `INTEGER` | Additive Measure | Quota for unit sales. |
+| `target_new_customers`| `INTEGER` | Additive Measure | Quota for account acquisition. |
+
+---
+
+## 6. Gold Layer — Ready-to-Serve Data Marts (`schema_gold`)
+
+Curated aggregated models pre-joined and optimized to deliver sub-second performance for executive BI reports.
+
+### 6.1 `schema_gold.mart_sales_vs_target`
+* **Grain:** 1 record per sales representative per month.
+* **Business Purpose:** Monthly KPI evaluation comparing actual net sales against the **most recent approved target plan**.
+
+| Column | Data Type | Description |
+| :--- | :--- | :--- |
+| `employee_sk` | `BIGINT` | Surrogate key linking sales representative. |
+| `employee_id` | `TEXT` | Natural employee identifier. |
+| `full_name` | `TEXT` | Employee full name. |
+| `region` | `TEXT` | Sales territory assigned during the target period. |
+| `team` | `TEXT` | Sales team assigned. |
+| `year` | `INTEGER` | Fiscal year. |
+| `month` | `INTEGER` | Fiscal month. |
+| `active_plan_version` | `TEXT` | Latest approved target plan applied (`v1`, `v2`, etc.). |
+| `actual_revenue` | `NUMERIC(18,2)` | Realized net sales revenue from `fact_sales`. |
+| `target_revenue` | `NUMERIC(18,2)` | Budgeted target revenue from `fact_targets`. |
+| `revenue_variance` | `NUMERIC(18,2)` | `actual_revenue - target_revenue`. |
+| `target_achievement_rate_pct` | `NUMERIC(6,2)` | Percentage attainment (`actual_revenue / target_revenue * 100`). |
+| `actual_quantity` | `INTEGER` | Units sold. |
+| `target_quantity` | `INTEGER` | Target unit sales. |
+| `actual_new_customers`| `INTEGER` | Newly acquired customer accounts. |
+| `target_new_customers`| `INTEGER` | Targeted new accounts quota. |
+
+### 6.2 `schema_gold.mart_distributor_performance`
+* **Grain:** 1 record per accredited distributor per month.
+* **Business Purpose:** Assesses B2B distributor logistics reliability and order fulfillment volume.
+
+| Column | Data Type | Description |
+| :--- | :--- | :--- |
+| `distributor_sk` | `BIGINT` | Surrogate key linking distributor. |
+| `distributor_id` | `TEXT` | Natural distributor code. |
+| `distributor_name` | `TEXT` | Registered corporate name. |
+| `tier` | `TEXT` | Distributor classification (`Tier 1`, `Tier 2`, `Tier 3`). |
+| `region` | `TEXT` | Geographic operating region. |
+| `year` | `INTEGER` | Calendar year. |
+| `month` | `INTEGER` | Calendar month. |
+| `total_orders` | `INTEGER` | Total purchase orders submitted. |
+| `total_qty_ordered` | `BIGINT` | Total units requested across orders. |
+| `total_qty_delivered` | `BIGINT` | Total units fulfilled and received. |
+| `total_gross_amount` | `NUMERIC(18,2)`| Total ordered monetary value. |
+| `total_delivered_amount`| `NUMERIC(18,2)`| Realized fulfilled monetary value. |
+| `avg_fill_rate_pct` | `NUMERIC(5,2)` | Average order fill rate (`qty_delivered / qty_ordered * 100`). |
+| `ontime_delivery_rate_pct`| `NUMERIC(5,2)`| Percentage of shipments fulfilling on-time delivery SLA. |
+
+---
+
+## 7. Business Metrics Formula Glossary
+
+| Metric Name | Business Definition | Mathematical Formula | Target SLA / Benchmark |
+| :--- | :--- | :--- | :---: |
+| **Target Achievement Rate %** | Degree to which a sales rep fulfills assigned revenue quotas. | $$\frac{\sum \text{actual\_revenue}}{\sum \text{target\_revenue}} \times 100$$ | $\ge 100\%$ |
+| **Revenue Variance** | Absolute monetary difference between actual sales and quota. | $$\text{actual\_revenue} - \text{target\_revenue}$$ | $\ge 0 \text{ VND}$ |
+| **Fill Rate %** | Measure of inventory availability and logistics fulfillment capacity. | $$\frac{\sum \text{qty\_delivered}}{\sum \text{qty\_ordered}} \times 100$$ | $\ge 95\%$ |
+| **On-Time Delivery Rate %** | Percentage of shipments reaching destination within SLA promise. | $$\frac{\text{Count of On-Time Orders}}{\text{Total Orders}} \times 100$$ | $\ge 90\%$ |
+| **Product Return Rate %** | Proportion of sold value returned due to defects or cancellations. | $$\frac{\sum \text{return\_net\_amount}}{\sum \text{sales\_gross\_amount}} \times 100$$ | $\le 3\%$ |
+
+---
+
+## 8. End-to-End Lineage Matrix
+
+| Source File | Bronze Table | Silver Cleansed Table | Gold Model Object | Layer Type |
+| :--- | :--- | :--- | :--- | :--- |
+| `SRC01_sales_transactions.csv` | `schema_bronze.sales_transactions` | `schema_silver.sales_transactions` | `schema_gold.fact_sales` | Fact |
+| `SRC02_sales_target_plan.xlsx` | `schema_bronze.sales_targets_raw` | `schema_silver.sales_targets` | `schema_gold.fact_targets` | Fact |
+| `SRC03_customer_master.csv` | `schema_bronze.customers` | `schema_silver.customers` | `schema_gold.dim_customers` | Dimension (SCD1) |
+| `SRC04_product_master.xlsx` | `schema_bronze.products` | `schema_silver.products` | `schema_gold.dim_products` | Dimension (SCD1) |
+| `SRC05_distributor_orders.xlsx` | `schema_bronze.distributor_orders` | `schema_silver.distributor_orders` | `schema_gold.mart_distributor_performance` | Data Mart |
+| `SRC06_distributor_master.csv` | `schema_bronze.distributors` | `schema_silver.distributors` | `schema_gold.dim_distributors` | Dimension (SCD2) |
+| `SRC07_employee_master.xlsx` | `schema_bronze.employees` | `schema_silver.employees` | `schema_gold.dim_employees` | Dimension (SCD2) |
+| `SRC08_territory_mapping.xlsx` | `schema_bronze.territory_mapping` | `schema_silver.territory_mapping` | *(Enriched into Employee/Customer)* | Dimension Join |
+| `SRC09_return_transactions.csv` | `schema_bronze.return_transactions` | `schema_silver.return_transactions` | `schema_gold.fact_returns` | Fact |
+| `SRC10_promotion_program.xlsx` | `schema_bronze.promotion_program` | `schema_silver.promotion_program` | *(Promotion Lineage Mapping)* | Attribute |
+| *(Calendar Script)* | - | - | `schema_gold.dim_date` | Dimension |
+| *(Gold Aggregation)* | - | - | `schema_gold.mart_sales_vs_target` | Data Mart |
