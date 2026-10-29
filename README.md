@@ -38,15 +38,6 @@
 * **Direct Field Sales Force:** 111 Sales Representatives managing key supermarket chains, modern trade accounts, and convenience stores across Northern, Central, and Southern Vietnam.
 * **Indirect Wholesale Network:** 138 Exclusive Regional Distributors managing local warehouses and placing bulk wholesale orders.
 
-```mermaid
-flowchart LR
-    A["VietDist Manufacturing & Central Hubs"] --> B["Direct Field Sales Force<br/><b>111 Sales Representatives</b>"]
-    A --> C["Indirect Wholesale Network<br/><b>138 Regional Distributors</b>"]
-    B --> D["Modern Trade & Retail Stores"]
-    C --> D
-    D --> E["End Consumers<br/><b>158.96B VND Net Revenue</b>"]
-```
-
 ### 1.2 Data Challenges vs Data Warehouse Solutions
 
 | Source Data Challenge (Before Pipeline ❌) | Data Warehouse Solution (After Pipeline ✅) | Empirical Verification Metric |
@@ -56,8 +47,6 @@ flowchart LR
 | **Dirty Formats & Missing Attributes:** Inconsistent date formats (`YYYY-MM-DD` vs `DD/MM/YYYY`), stray whitespaces, and 51.75% missing tax codes. | **Schema Enforcement & Defensive Casting:** Strict casting to `DATE`, `NUMERIC(15,2)`, text normalization (`TRIM/UPPER`), and null handling. | **100% schema conformance**, preventing downstream calculation failures. |
 | **Sales Rep Territory Transfers (Historical Distortion):** Reps reassigned across regions mid-year distorted historical sales reports when overwritten. | **Historical Preservation with SCD Type 2:** Managed via `effective_date` and `expiry_date`, applying **Point-in-Time (AS-OF) Joins** to transaction timestamps. | **100% historical attribution accuracy** for fair sales rep incentive and KPI auditing. |
 | **Multi-Version KPI Targets:** Annual revenue quotas revised 3 times (`v1`, `v2`, `v3`) across disconnected Excel sheets caused reconciliation friction. | **Automated Unpivoting & Window Ranking:** Ingested 1,955 target rows across multi-sheet workbooks, dynamically picking the latest active revision. | **Automated reconciliation of 1,332 KPI records**, uncovering an overall quota achievement of **51.19%**. |
-
-[⬆ Back to Top](#)
 
 ---
 
@@ -118,8 +107,6 @@ flowchart LR
     style Silver fill:#475569,stroke:#94a3b8,color:#ffffff,stroke-width:2px
     style Gold fill:#854d0e,stroke:#eab308,color:#ffffff,stroke-width:2px
 ```
-
-[⬆ Back to Top](#)
 
 ---
 
