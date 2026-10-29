@@ -1,202 +1,265 @@
-# 🏛️ VietDist Corporation — Enterprise End-to-End Sales Analytics Data Pipeline
-### *Kiến Trúc Medallion Lakehouse: Từ Dữ Liệu Giao Dịch Thô (Raw Files) Đến Kho Dữ Liệu Star Schema Chuẩn Hóa (PostgreSQL)*
+<a id="top"></a>
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+<div align="center">
+
+# 🏛️ VietDist Corporation — Enterprise End-to-End Data Pipeline
+### *Kiến Trúc Medallion Lakehouse: Tự Động Hóa Ingestion Từ Google Drive API Đến Kho Dữ Liệu Star Schema Trên PostgreSQL*
+
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Google Drive API](https://img.shields.io/badge/Google_Drive_API-v3_Cloud_Ingestion-34A853?style=for-the-badge&logo=googledrive&logoColor=white)](https://developers.google.com/drive)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze%20→%20Silver%20→%20Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
+[![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze_→_Silver_→_Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
 [![Data Modeling](https://img.shields.io/badge/Data_Modeling-Kimball_Star_Schema-blue?style=for-the-badge)](https://www.kimballgroup.com/)
 [![SCD Type 2](https://img.shields.io/badge/SCD_Type_2-Historical_Integrity-orange?style=for-the-badge)]()
-[![Domain](https://img.shields.io/badge/Domain-FMCG_Distribution-green?style=for-the-badge)]()
 [![Status](https://img.shields.io/badge/Pipeline_Status-Production_Ready-success?style=for-the-badge)]()
 
-> **Dự án xây dựng đường ống dữ liệu (ETL / Data Pipeline) tự động hóa chuẩn công nghiệp cho doanh nghiệp phân phối hàng tiêu dùng nhanh (FMCG) quy mô toàn quốc — VietDist Corporation. Xử lý hơn 164,901 bản ghi từ 10 nguồn dữ liệu rời rạc bằng Python & PostgreSQL theo Kiến trúc Medallion Lakehouse (Bronze ➔ Silver ➔ Gold), thiết kế mô hình chiều Kimball Star Schema với SCD Type 2, và xuất bản các Data Marts phân tích sẵn sàng cho Power BI.**
->
-> 📌 *Phạm vi dự án (Project Scope): Dự án tập trung toàn diện vào vòng đời Data Engineering & Analytics Engineering — từ nạp dữ liệu thô (Raw Ingestion), kiểm toán chất lượng (Data Profiling), làm sạch và khử trùng lặp (Silver Cleansing), đến thiết kế Star Schema, bảo toàn lịch sử nhân sự (SCD Type 2) và điều phối an toàn (Fail-Fast Orchestration). Tầng Gold là Single Source of Truth phục vụ trực tiếp downstream BI.*
+[**🎯 Bối Cảnh**](#part-1) • 
+[**🏗️ Kiến Trúc**](#part-2) • 
+[**☁️ Cloud Ingestion**](#part-3) • 
+[**🔄 3 Tầng Medallion**](#part-4) • 
+[**📐 Star Schema**](#part-5) • 
+[**🛒 2 Data Marts**](#part-6) • 
+[**🛡️ Kiểm Định Dữ Liệu**](#part-7) • 
+[**📊 Phân Tích Kinh Doanh**](#part-8) • 
+[**🚀 Cài Đặt**](#part-9)
+
+</div>
 
 ---
 
-## 📌 Mục Lục (Table of Contents)
-
-1. 🏢 [Tổng Quan Doanh Nghiệp & Bài Toán Giải Quyết](#1--tổng-quan-doanh-nghiệp--bài-toán-giải-quyết)
-   - 1.1 [Mô hình Vận hành Phân phối FMCG](#11-mô-hình-vận-hành-phân-phối-fmcg)
-   - 1.2 [Bộ Số Liệu Thực Chứng & Quy Mô Xử Lý](#12-bộ-số-liệu-thực-chứng--quy-mô-xử-lý)
-   - 1.3 [Điểm Nghẽn Kỹ Thuật & Nghiệp Vụ Cần Tháo Gỡ](#13-điểm-nghẽn-kỹ-thuật--nghiệp-vụ-cần-tháo-gỡ)
-2. 🔄 [Quy Trình 5 Bước Triển Khai Pipeline Kèm Hình Ảnh & Code Chứng Minh](#2--quy-trình-5-bước-triển-khai-pipeline-kèm-hình-ảnh--code-chứng-minh)
-   - [Bước 1: Thiết Kế Topology & Phân Tách 3 Tầng Medallion](#bước-1-thiết-kế-topology--phân-tách-3-tầng-medallion)
-   - [Bước 2: Tầng Bronze — Streaming Ingestion & Kiểm Toán Dữ Liệu Tự Động](#bước-2-tầng-bronze--streaming-ingestion--kiểm-toán-dữ-liệu-tự-động)
-   - [Bước 3: Tầng Silver — Chuẩn Hóa, Ép Kiểu & Khử Trùng Lặp Khóa Phức Hợp](#bước-3-tầng-silver--chuẩn-hóa-ép-kiểu--khử-trùng-lặp-khóa-phức-hợp)
-   - [Bước 4: Tầng Gold — Xây Dựng Star Schema, SCD Type 2 & Data Marts](#bước-4-tầng-gold--xây-dựng-star-schema-scd-type-2--data-marts)
-   - [Bước 5: Điều Phối Tự Động (Orchestration), Cơ Chế Fail-Fast & Sẵn Sàng Cho BI](#bước-5-điều-phối-tự-động-orchestration-cơ-chế-fail-fast--sẵn-sàng-cho-bi)
-3. 📐 [Mô Hình Dữ Liệu Kimball Star Schema & Cơ Chế SCD Type 2](#3--mô-hình-dữ-liệu-kimball-star-schema--cơ-chế-scd-type-2)
-4. 📊 [Phát Hiện Kinh Doanh Cốt Lõi Từ Data Marts Tầng Gold](#4--phát-hiện-kinh-doanh-cốt-lõi-từ-data-marts-tầng-gold)
-5. 🎯 [Ma Trận Hành Động Chiến Lược Ưu Tiên (Action Matrix P1–P4)](#5--ma-trận-hành-động-chiến-lược-ưu-tiên-action-matrix-p1p4)
-6. 🚀 [Cấu Trúc Thư Mục & Hướng Dẫn Thực Thi (Quickstart)](#6--cấu-trúc-thư-mục--hướng-dẫn-thực-thi-quickstart)
-7. 👤 [Thông Tin Tác Giả & Liên Hệ](#7--thông-tin-tác-giả--liên-hệ)
+> 📌 **Phạm vi dự án (Project Scope):** Dự án tập trung toàn diện vào vòng đời **Data Engineering & Analytics Engineering** cho doanh nghiệp phân phối hàng tiêu dùng nhanh (FMCG) quy mô toàn quốc — **VietDist Corporation**. 
+> Hệ thống xây dựng đường ống tự động hóa hoàn toàn:
+> 1. **Cloud Ingestion:** Kết nối **Google Drive API v3** qua **GCP Service Account**, tải trực tiếp 10 tập tin nguồn (**164,901 bản ghi**, 25.2 MB) vào bộ nhớ đệm nhị phân (**In-Memory `io.BytesIO`**) mà không ghi file tạm xuống ổ cứng.
+> 2. **Medallion Lakehouse (PostgreSQL):** Chuẩn hóa qua 3 tầng (Bronze $\rightarrow$ Silver $\rightarrow$ Gold), khử trùng lặp khóa phức hợp, bảo toàn biến động điều chuyển nhân sự với **SCD Type 2 (Point-in-Time Join)**.
+> 3. **Business Data Marts:** Đóng gói 2 Data Marts chuyên biệt (`mart_sales_vs_target` và `mart_distributor_performance`), tính toán sẵn (Pre-aggregated) các chỉ số KPI và SLA chuỗi cung ứng, sẵn sàng kết nối trực tiếp cho các công cụ BI (Power BI / Metabase).
 
 ---
 
-## 1. 🏢 Tổng Quan Doanh Nghiệp & Bài Toán Giải Quyết
+<a id="part-1"></a>
+## 🎯 1. Bối Cảnh Doanh Nghiệp & Bài Toán Giải Quyết
 
-### 1.1 Mô hình Vận hành Phân phối FMCG
-**VietDist Corporation** là doanh nghiệp sản xuất và phân phối hàng tiêu dùng nhanh (FMCG) trên phạm vi toàn quốc với mạng lưới vận hành qua hai kênh thương mại song song:
-1. **Kênh Trực tiếp (Direct Sales / Key Accounts):** 111 nhân viên kinh doanh (Sales Reps) trực tiếp chăm sóc các chuỗi siêu thị, cửa hàng tiện lợi và đại lý lớn tại 3 miền Bắc — Trung — Nam.
-2. **Kênh Bán buôn Gián tiếp (B2B Wholesale):** Mạng lưới 138 Nhà phân phối (Distributors) độc quyền quản lý kho hàng địa phương, đặt đơn sỉ và tái phân phối tới các điểm bán lẻ nhỏ lẻ.
+### 1.1 Vận hành Kênh Phân phối FMCG
+**VietDist Corporation** vận hành mạng lưới phân phối song song 2 kênh thương mại:
+* **Kênh Trực tiếp (Direct Field Sales):** 111 đại diện kinh doanh (Sales Reps) phụ trách chăm sóc siêu thị, đại lý và cửa hàng tiện lợi tại 3 miền Bắc — Trung — Nam.
+* **Kênh Bán buôn Gián tiếp (B2B Wholesale):** Mạng lưới 138 Nhà phân phối (Distributors) độc quyền quản lý kho địa phương và đặt đơn hàng sỉ định kỳ.
 
 ```mermaid
 flowchart LR
-    A["VietDist Manufacturing & Central Hubs"] --> B["Direct Field Sales Force<br/>(111 Sales Representatives)"]
-    A --> C["Indirect Wholesale Network<br/>(138 Regional Distributors)"]
-    B --> D["Supermarkets & Modern Trade"]
+    A["VietDist Manufacturing & Central Hubs"] --> B["Kênh Bán Hàng Trực Tiếp<br/><b>111 Sales Representatives</b>"]
+    A --> C["Kênh Bán Buôn Gián Tiếp<br/><b>138 Nhà Phân Phối Độc Quyền</b>"]
+    B --> D["Chuỗi Siêu Thị & Cửa Hàng Tiện Lợi"]
     C --> D
-    D --> E["End Consumers<br/><b>158.96 Tỷ VNĐ Net Revenue</b>"]
+    D --> E["Người Tiêu Dùng Cuối<br/><b>158.96 Tỷ VNĐ Net Revenue</b>"]
 ```
 
----
+### 1.2 Bảng Đối Soát Vấn Đề Nguồn vs Giải Pháp Pipeline
 
-### 1.2 Bộ Số Liệu Thực Chứng & Quy Mô Xử Lý
-Toàn bộ số liệu dưới đây được xác thực bằng các câu truy vấn SQL trực tiếp trên cơ sở dữ liệu production PostgreSQL trong suốt chu kỳ năm tài chính 2024:
+| Vấn đề ở Dữ liệu Nguồn (Before Pipeline ❌) | Giải pháp tại Kho Dữ liệu (After Pipeline ✅) | Kết quả Đo lường Thực chứng |
+| :--- | :--- | :---: |
+| **Thu thập file thủ công từ Cloud (Manual Sync):** Tải file thủ công từ Google Drive dễ quên cập nhật, sai phiên bản và tốn dung lượng ổ đĩa. | **Tự động hóa Google Drive API v3:** Sử dụng **GCP Service Account** kết hợp `MediaIoBaseDownload` stream thẳng dữ liệu vào RAM (`io.BytesIO`). | **100% tự động hóa Ingestion**, không lưu file tạm ra ổ đĩa, nạp xong 10 nguồn trong **44.4s**. |
+| **Bản ghi trùng lặp (Order Retry):** File CSV 20.6 MB chứa các dòng trùng lặp do lỗi mạng khi truyền tải đơn hàng từ ứng dụng bán hàng. | **Khử trùng lặp khóa phức hợp:** Window Function `ROW_NUMBER() OVER (PARTITION BY order_id, product_id ORDER BY _ingested_at DESC)`. | **0 dòng trùng lặp**, bảo toàn đúng 119,101 dòng sản phẩm (50,000 đơn hàng duy nhất). |
+| **Dữ liệu thô hỗn loạn (Dirty Data):** Trộn lẫn định dạng ngày (`YYYY-MM-DD` và `DD/MM/YYYY`), chuỗi có khoảng trắng thừa, thiếu 51.75% mã số thuế. | **Chuẩn hóa Schema & Ép kiểu an toàn:** Ép kiểu chặt chẽ sang `DATE`, `NUMERIC(15,2)`, chuẩn hóa chuỗi `TRIM/UPPER`, cách ly lỗi. | **100% bản ghi hợp lệ**, loại bỏ hoàn toàn rủi ro sai lệch kiểu dữ liệu khi tính toán doanh số. |
+| **Nhân sự chuyển vùng làm sai lịch sử:** Sales Reps chuyển vùng giữa năm làm sai lệch báo cáo doanh thu quá khứ nếu ghi đè địa bàn hiện tại. | **Bảo toàn lịch sử với SCD Type 2:** Quản lý bằng `effective_date`, `expiry_date` và thực hiện **Point-in-Time (AS-OF) Join** tại thời điểm phát sinh đơn. | **Chính xác 100% doanh số lịch sử**, phục vụ tính thưởng KPI công bằng cho 111 Sales Reps. |
+| **Kế hoạch KPI đa phiên bản:** Chỉ tiêu năm bị sửa đổi 3 lần (`v1`, `v2`, `v3`) lưu ở các sheet Excel rời rạc gây khó đối soát. | **Unpivot & Version Windowing:** Tự động unpivot 1,955 dòng chỉ tiêu từ file Excel, xếp hạng lấy phiên bản chốt mới nhất. | **Đối soát tự động 1,332 lượt KPI**, phát hiện tỷ lệ hoàn thành chỉ tiêu đạt **51.19%**. |
 
-| Chỉ số Vận hành & Kỹ thuật | Số liệu Thực chứng | Bảng Nguồn / Đích | Ý nghĩa Phân tích & Nghiệp vụ |
-| :--- | :---: | :---: | :--- |
-| **Tổng số dòng dữ liệu thô nạp** | **164,901 dòng** | 10 Tập tin nguồn | File bán hàng 20.6 MB, bảng kế hoạch đa phiên bản, master data. |
-| **Tổng số dòng giao dịch bán hàng** | **119,101 dòng** | `schema_gold.fact_sales` | 50,000 đơn hàng đa sản phẩm từ 01/01/2024 đến 31/12/2024. |
-| **Tổng doanh thu gộp (Gross Sales)** | **163.85 Tỷ VNĐ** | `schema_gold.fact_sales` | Doanh thu trước khi trừ các khoản chiết khấu thương mại. |
-| **Tổng giá trị chiết khấu bán hàng** | **4.89 Tỷ VNĐ** | `schema_gold.fact_sales` | Tỷ lệ chiết khấu bình quân đạt 2.98% trên tổng doanh thu gộp. |
-| **Doanh thu thuần thực đạt (Net Sales)** | **158.96 Tỷ VNĐ** | `schema_gold.fact_sales` | Dòng tiền thuần thực thu về doanh nghiệp. |
-| **Đối soát Thực tế vs Chỉ tiêu KPI** | **157.65B / 290.74B** | `schema_gold.mart_sales_vs_target` | **51.19% tỷ lệ đạt chỉ tiêu** qua 1,332 lượt đánh giá nhân viên-tháng. |
-| **Đơn đặt hàng sỉ của Nhà phân phối** | **8,000 đơn hàng** | `schema_gold.mart_distributor_performance` | 9.42 triệu đơn vị đặt mua vs 7.99 triệu đơn vị thực giao. |
-| **Tỷ lệ giao đủ hàng (Fill Rate %)** | **84.63%** | `schema_gold.mart_distributor_performance` | Thấp hơn ngưỡng SLA 95.0%, chứng minh thất thoát cơ hội bán hàng. |
-| **Tỷ lệ giao đúng hạn (On-Time SLA %)** | **40.36%** | `schema_gold.mart_distributor_performance` | Điểm nghẽn vận tải nghiêm trọng (trễ giao hàng trung bình 2.8 ngày). |
-| **Giá trị hàng bán bị trả lại** | **1.31 Tỷ VNĐ** | `schema_gold.fact_returns` | 3,665 giao dịch hoàn hàng do lỗi vỡ bao bì hoặc cận date. |
-| **Thời gian chạy toàn bộ Pipeline** | **~48.8 giây** | `schema_gold.pipeline_logs` | Bronze: 44.40s, Silver: 3.55s, Gold: 0.85s (Tự động 100%). |
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-### 1.3 Điểm Nghẽn Kỹ Thuật & Nghiệp Vụ Cần Tháo Gỡ
+<a id="part-2"></a>
+## 🏗️ 2. Kiến Trúc Luồng Dữ Liệu (System Architecture)
 
-| Vấn đề Dữ liệu Nguồn (Before Pipeline ❌) | Giải pháp Kiến trúc Medallion (After Pipeline ✅) |
-| :--- | :--- |
-| **Bản ghi trùng lặp do gửi lại đơn hàng (Order Retry):** File CSV giao dịch 119,101 dòng chứa các bản ghi trùng lặp do mạng hoặc re-transmission. | **Khử trùng lặp khóa phức hợp:** Áp dụng Window Function `ROW_NUMBER() OVER (PARTITION BY order_id, product_id ORDER BY _ingested_at DESC)` giữ lại trạng thái mới nhất (**0 dòng trùng lặp**). |
-| **Định dạng hỗn loạn & Thiếu dữ liệu (Dirty Text):** Định dạng ngày lẫn lộn giữa `YYYY-MM-DD` và `DD/MM/YYYY`, số tiền chứa ký tự lạ, thiếu 51.75% mã số thuế. | **Chuẩn hóa Schema & Ép kiểu chặt chẽ:** Ép kiểu an toàn sang `DATE`, `NUMERIC(15,2)`, chuẩn hóa chuỗi (`TRIM`, `UPPER`), bổ sung trường metadata kiểm toán (`_ingested_at`, `_batch_id`). |
-| **Nhân sự chuyển vùng làm sai lệch doanh thu lịch sử:** Sales Reps chuyển vùng giữa năm (ví dụ tháng 6 chuyển từ Bắc vào Nam) làm báo cáo cũ bị ghi đè. | **Bảo toàn lịch sử với SCD Type 2:** Áp dụng `valid_from`, `valid_to`, `is_current` trên bảng nhân viên, thực hiện Point-in-Time (AS-OF) Join gán đúng địa bàn tại thời điểm bán hàng. |
-| **Biến động chỉ tiêu nhiều phiên bản (Planning Versions):** Kế hoạch KPI sửa đổi 3 lần (`v1_Original`, `v2_MidYearReview`, `v3_Q4Push`) gây xung đột đối soát. | **Multi-Version Window Ranking:** Lưu trữ đầy đủ lịch sử các phiên bản ở tầng Fact, tự động xếp hạng để lấy phiên bản mới nhất phục vụ tính thưởng cho Sales Reps. |
-
----
-
-## 2. 🔄 Quy Trình 5 Bước Triển Khai Pipeline Kèm Hình Ảnh & Code Chứng Minh
-
-Quy trình ETL được tổ chức tuần tự qua **5 bước kỹ thuật** bám sát kiến trúc Medallion Lakehouse:
+Hệ thống được thiết kế theo nguyên tắc **Decoupled Architecture** — phân tách hoàn toàn tầng nạp dữ liệu thô, tầng làm sạch staging và tầng kho dữ liệu phân tích nhằm đảm bảo tính **Chạy lại an toàn (Idempotency)** và **Cô lập lỗi (Fault Isolation)**:
 
 ```mermaid
 flowchart LR
-    A["<b>Bước 1</b><br/>Topology Medallion<br/><i>(init_db.sql)</i>"] 
-    --> B["<b>Bước 2</b><br/>Bronze Ingestion<br/><i>(loader/*.py)</i>"]
-    --> C["<b>Bước 3</b><br/>Silver Cleansing<br/><i>(silver/*.sql)</i>"]
-    --> D["<b>Bước 4</b><br/>Gold Star Schema<br/><i>(gold/*.sql)</i>"]
-    --> E["<b>Bước 5</b><br/>Orchestration & BI<br/><i>(main.py)</i>"]
+    subgraph Cloud ["☁️ CLOUD STORAGE & AUTHENTICATION"]
+        direction TB
+        GD[("📁 Google Drive Shared Folders<br/><i>(10 Source Files · CSV & XLSX · 25.2 MB)</i>")]
+        SA["🔑 Google Cloud Service Account<br/><i>(OAuth 2.0 · Scopes: drive.readonly)</i>"]
+        GD -.->|Authenticate| SA
+    end
+
+    subgraph Memory ["⚡ IN-MEMORY STREAMING (Python)"]
+        direction TB
+        BIO["BytesIO Buffer<br/><i>(MediaIoBaseDownload)</i>"]
+        FP["File Parser<br/><i>(UTF-8-SIG · BOM Strip · Multi-sheet)</i>"]
+        BIO --> FP
+    end
+
+    subgraph DW ["🐘 POSTGRESQL DATA WAREHOUSE (Medallion)"]
+        direction TB
+        
+        subgraph Bronze ["🥉 BRONZE (schema_bronze)"]
+            B1[("Raw Ingestion Tables<br/><i>(Append-Only · Raw TEXT)</i>")]
+            B2[("ingest_log<br/><i>(UUID Batch Tracking)</i>")]
+        end
+
+        subgraph Silver ["🥈 SILVER (schema_silver)"]
+            SV1[("Cleaned & Typed Tables<br/><i>(Deduplicated · ISO Dates · Validated)</i>")]
+        end
+
+        subgraph Gold ["🥇 GOLD (schema_gold)"]
+            G_DIM[("Dimensions<br/><i>dim_customers, dim_products,<br/>dim_employees (SCD2), dim_date</i>")]
+            G_FACT[("Fact Tables<br/><i>fact_sales (AS-OF Join),<br/>fact_targets, fact_returns, fact_orders</i>")]
+            G_MART[("Data Marts<br/><i>mart_sales_vs_target,<br/>mart_distributor_performance</i>")]
+        end
+    end
+
+    subgraph Downstream ["📊 DOWNSTREAM CONSUMPTION"]
+        BI1["💻 Ad-hoc SQL Analytics"]
+        BI2["📈 Power BI / BI Dashboards<br/><i>(Pre-aggregated Data Marts)</i>"]
+    end
+
+    Cloud ==>|Google Drive API v3<br/>Stream Chunks| Memory
+    Memory ==>|Chunked to_sql| Bronze
+    Bronze ==>|SQL Transformations<br/>Cast, Trim & Dedup| Silver
+    Silver ==>|Kimball Modeling<br/>Surrogate Keys & SCD2| Gold
+    Gold --> Downstream
+
+    style Cloud fill:#1e3a8a,stroke:#3b82f6,color:#ffffff,stroke-width:2px
+    style Memory fill:#134e4a,stroke:#14b8a6,color:#ffffff,stroke-width:2px
+    style Bronze fill:#8B5A2B,stroke:#CD7F32,color:#ffffff,stroke-width:2px
+    style Silver fill:#475569,stroke:#94a3b8,color:#ffffff,stroke-width:2px
+    style Gold fill:#854d0e,stroke:#eab308,color:#ffffff,stroke-width:2px
 ```
+
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-### Bước 1: Thiết Kế Topology & Phân Tách 3 Tầng Medallion
+<a id="part-3"></a>
+## ☁️ 3. Tự Động Hóa Cloud Ingestion Từ Google Drive API
 
-![Bước 1: Topology Medallion Architecture](assets/pipeline/step_1_architecture_blueprint.png)
+### 3.1 Cơ Chế Kỹ Thuật Độc Lập & Tối Ưu RAM
+1. **Xác thực phi tập trung (GCP Service Account):** Sử dụng khóa định danh JSON (`GOOGLE_SERVICE_ACCOUNT_KEY`) cấu hình qua biến môi trường `.env`, cấp quyền tối thiểu an toàn `https://www.googleapis.com/auth/drive.readonly`.
+2. **In-Memory Streaming (Không ghi đĩa cứng):** Thay vì tải file `.csv`/`.xlsx` về ổ đĩa rồi mở lại (tốn I/O đĩa và tạo rác hệ thống), pipeline sử dụng `googleapiclient.http.MediaIoBaseDownload` để tải từng chunk nhị phân vào luồng bộ nhớ **`io.BytesIO()`**.
+3. **Bộ chuyển đổi linh hoạt (`file_parser.py`):**
+   * Tự động loại bỏ ký tự Byte Order Mark (`\ufeff`) trong các file CSV tiếng Việt bằng `encoding='utf-8-sig'`.
+   * Đọc đa sheet tự động cho file chỉ tiêu `SRC02_sales_target_plan.xlsx` (`sheet_name=None`) để nạp toàn bộ các phiên bản kế hoạch (`v1`, `v2`, `v3`).
+4. **Giữ nguyên bản chất dữ liệu (`dtype=str` & `keep_default_na=False`):** Ngăn chặn việc Pandas tự ý biến đổi số `00123` thành `123` hoặc ô trống thành chuỗi `"nan"`.
 
-#### 🎯 1. Mục tiêu & Bài toán giải quyết:
-Khởi tạo cấu trúc kho dữ liệu PostgreSQL với 3 schemas vật lý độc lập (`schema_bronze`, `schema_silver`, `schema_gold`) nhằm:
-* **Cô lập lỗi (Fault Isolation):** Thay đổi ở tập tin nguồn hoặc lỗi dữ liệu thô chỉ dừng lại ở tầng Bronze, không làm đổ vỡ báo cáo ở tầng Gold.
-* **Tính chạy lại an toàn (Idempotency):** Cho phép xóa và chạy lại bất kỳ tầng nào mà không làm nhân đôi bản ghi hay mất dữ liệu lịch sử.
-* **Theo dõi nguồn gốc dữ liệu (Data Lineage & Audit):** Thiết lập bảng nhật ký `ingest_log` và các trường siêu dữ liệu kiểm toán.
+<details>
+<summary><b>🔍 Xem code Python kết nối Google Drive API v3 & In-Memory Streaming (Click để mở rộng)</b></summary>
 
-#### 💻 2. Đoạn Code Kỹ thuật Chứng minh (`init_db.sql`):
-```sql
--- Phase 0 · Task 0.1 — Khởi tạo 3 schemas Medallion và bảng nhật ký kiểm toán
-CREATE SCHEMA IF NOT EXISTS schema_bronze;   -- Layer "Raw": lưu nguyên bản từ nguồn
-CREATE SCHEMA IF NOT EXISTS schema_silver;   -- Layer "Staging": đã clean, chuẩn kiểu
-CREATE SCHEMA IF NOT EXISTS schema_gold;     -- Layer "DWH": Star Schema cho phân tích BI
-
--- Bảng log ingestion kiểm toán ở tầng Bronze
-CREATE TABLE IF NOT EXISTS schema_bronze.ingest_log (
-    log_id          BIGSERIAL PRIMARY KEY,
-    batch_id        UUID NOT NULL,
-    source_name     TEXT NOT NULL,          -- Ví dụ: sales_transactions
-    source_file     TEXT NOT NULL,          -- Ví dụ: SRC01_sales_transactions.csv
-    source_platform TEXT NOT NULL,          -- 'google_drive' | 'local_storage'
-    rows_loaded     INTEGER,
-    status          TEXT NOT NULL,          -- 'SUCCESS' | 'FAILED'
-    error_message   TEXT,
-    duration_sec    NUMERIC(10,2),
-    started_at      TIMESTAMP NOT NULL DEFAULT NOW(),
-    finished_at     TIMESTAMP
-);
-```
-
-#### 📊 3. Dữ liệu Thực chứng & Bảng Kiểm toán:
-* Khởi tạo thành công **3 schemas vật lý** trên PostgreSQL (`vietdist_db`).
-* Bảng kiểm toán `ingest_log` ghi nhận tự động từng lượt nạp với mã `batch_id` dạng UUID độc bản.
-* Tách biệt quyền truy cập: ứng dụng nạp chỉ có quyền ghi vào Bronze, các kịch bản staging ghi vào Silver, và người dùng phân tích/Power BI chỉ được đọc tại Gold.
-
----
-
-### Bước 2: Tầng Bronze — Streaming Ingestion & Kiểm Toán Dữ Liệu Tự Động
-
-![Bước 2: Bronze Ingestion & Profiling](assets/pipeline/step_2_bronze_ingestion_profiling.png)
-
-#### 🎯 1. Mục tiêu & Bài toán giải quyết:
-Nạp 10 nguồn dữ liệu (164,901 dòng) vào `schema_bronze`. Để tránh tràn bộ nhớ RAM với tập tin giao dịch lớn (20.6 MB), pipeline áp dụng cơ chế **Chunked Streaming Ingestion**. Đồng thời, toàn bộ dữ liệu thô được lưu dưới định dạng chuỗi (`TEXT`) để chống đứt gãy pipeline khi dữ liệu đầu vào chứa lỗi cú pháp.
-
-#### 💻 2. Đoạn Code Kỹ thuật Chứng minh (`loader/load_sales_transaction.py` & `utils/db_utils.py`):
 ```python
-# Trích xuất từ loader/load_sales_transaction.py & utils/db_utils.py
-def add_metadata(df, source_file, source_platform="google_drive", batch_id=None):
-    """Bổ sung các trường metadata phục vụ kiểm toán dữ liệu."""
-    df = df.copy()
-    df['_source_file'] = source_file
-    df['_source_platform'] = source_platform
-    df['_ingested_at'] = datetime.now()
-    df['_batch_id'] = batch_id or str(uuid.uuid4())
-    return df
+# Trích xuất từ utils/db_utils.py: Kết nối Google Drive và tải dữ liệu vào RAM
+import os
+from io import BytesIO
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 
-def load_to_bronze(df, table_name, engine, schema='schema_bronze'):
-    """Nạp an toàn vào PostgreSQL, lưu nguyên bản định dạng TEXT để tránh lỗi ép kiểu."""
-    rows_affected = df.to_sql(
-        name=table_name, con=engine, schema=schema,
-        if_exists='append', index=False, chunksize=10000, method='multi'
+SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY')
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+def get_service_account():
+    """Khởi tạo Drive Service từ Service Account Key JSON."""
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=SCOPES
     )
-    return len(df)
+    return build("drive", "v3", credentials=credentials)
+
+def download_data(service, file_id):
+    """
+    Tải file trực tiếp từ Google Drive vào luồng bộ nhớ BytesIO.
+    Tuyệt đối không lưu file tạm ra ổ đĩa máy tính (Zero disk footprint).
+    """
+    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+    buffer = BytesIO()
+    downloader = MediaIoBaseDownload(buffer, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+    buffer.seek(0)
+    return buffer
 ```
+</details>
 
-#### 📊 3. Dữ liệu Thực chứng & Bảng Kiểm toán:
-**Bảng kiểm toán nạp 10 nguồn dữ liệu vào Tầng Bronze:**
+<details>
+<summary><b>🔍 Xem code Python xử lý luồng nhị phân và đọc dữ liệu an toàn (Click để mở rộng)</b></summary>
 
-| Tập Tin Nguồn (Source File) | Bảng Đích (Destination Table) | Số Dòng Nạp | Định Dạng / Kích Thước | Thời Gian Nạp | Trạng Thái |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| `SRC01_sales_transactions.csv` | `schema_bronze.sales_transactions` | **119,101** | CSV (20.6 MB) | 28.5s | `SUCCESS` ✅ |
-| `SRC02_sales_target_plan.xlsx` | `schema_bronze.sales_targets_raw` | **1,955** | XLSX (3 Version Sheets) | 2.1s | `SUCCESS` ✅ |
-| `SRC03_customer_master.csv` | `schema_bronze.customers` | **2,000** | CSV (375 KB) | 1.2s | `SUCCESS` ✅ |
-| `SRC04_product_master.xlsx` | `schema_bronze.products` | **85** | XLSX (11 KB) | 0.8s | `SUCCESS` ✅ |
-| `SRC05_distributor_orders.xlsx` | `schema_bronze.distributor_orders`| **8,000** | XLSX (3.5 MB) | 4.3s | `SUCCESS` ✅ |
-| `SRC06_distributor_master.csv` | `schema_bronze.distributors` | **138** | CSV (29 KB) | 0.9s | `SUCCESS` ✅ |
-| `SRC07_employee_master.xlsx` | `schema_bronze.employees` | **150** | XLSX (34 KB) | 1.1s | `SUCCESS` ✅ |
-| `SRC08_territory_mapping.xlsx` | `schema_bronze.territory` | **63** | XLSX (69 KB) | 0.7s | `SUCCESS` ✅ |
-| `SRC09_return_transactions.csv`| `schema_bronze.returns` | **3,665** | CSV (487 KB) | 1.5s | `SUCCESS` ✅ |
-| `SRC10_promotion_program.xlsx` | `schema_bronze.promotions` | **10** | XLSX (9 KB) | 0.6s | `SUCCESS` ✅ |
-| **Tổng cộng (10 Nguồn)** | **schema_bronze** | **164,901 rows** | **~25.2 MB** | **44.4s** | `100% Ingested` |
+```python
+# Trích xuất từ utils/file_parser.py: Đọc nhị phân, xử lý BOM và ép TEXT
+import pandas as pd
 
-* **Kết quả từ Báo cáo Profiling tự động (`Profiling_Report.xlsx`):**
-  * Cột `tax_code` trong bảng `customers` thiếu **1,035 giá trị (51.75% missing)** $\rightarrow$ Ưu tiên xử lý điền giá trị mặc định ở tầng Silver.
-  * Xử lý unpivot thành công **1,955 chỉ tiêu doanh số** qua 3 sheet phiên bản kế hoạch (`v1`, `v2`, `v3`) mà không làm ghi đè mục tiêu ban đầu.
+def read_data(file_name, buffer, sheet_name=0):
+    """
+    Đọc dữ liệu từ luồng BytesIO, ép tất cả về kiểu string (TEXT) cho tầng Bronze,
+    loại bỏ BOM UTF-8 (\ufeff) cho dữ liệu tiếng Việt.
+    """
+    file_name_lower = file_name.lower()
+    if file_name_lower.endswith(".csv"):
+        return pd.read_csv(
+            buffer,
+            encoding="utf-8-sig",
+            dtype=str,
+            keep_default_na=False
+        )
+    elif file_name_lower.endswith((".xlsx", ".xlsm")):
+        return pd.read_excel(
+            buffer,
+            sheet_name=sheet_name,
+            engine="openpyxl",
+            dtype=str,
+            keep_default_na=False
+        )
+```
+</details>
+
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-### Bước 3: Tầng Silver — Chuẩn Hóa, Ép Kiểu & Khử Trùng Lặp Khóa Phức Hợp
+<a id="part-4"></a>
+## 🔄 4. Quy Trình Biến Đổi Dữ Liệu Qua 3 Tầng (Medallion)
 
-![Bước 3: Silver Cleansing & Conformance](assets/pipeline/step_3_silver_cleansing_normalization.png)
+### 🥉 Tầng 1: Bronze Layer (Raw Streaming & Ingestion Audit)
+* **Mục tiêu:** Nạp toàn vẹn 10 nguồn dữ liệu từ Google Drive vào `schema_bronze`, tự động đánh dấu siêu dữ liệu phục vụ truy xuất nguồn gốc (Data Lineage).
+* **Cơ chế ghi nhật ký (`schema_bronze.ingest_log`):** Tự động tiêm các trường siêu dữ liệu vào từng dòng:
+  * `_source_file`: Tên tập tin gốc trên Google Drive.
+  * `_source_platform`: Đánh dấu nguồn gốc `'google_drive'`.
+  * `_ingested_at`: Dấu thời gian hệ thống nạp dữ liệu.
+  * `_batch_id`: Mã UUID độc bản đại diện cho mỗi phiên chạy của pipeline.
 
-#### 🎯 1. Mục tiêu & Bài toán giải quyết:
-Chuyển đổi dữ liệu chuỗi thô từ Bronze thành dữ liệu sạch tại `schema_silver`. Điểm cốt lõi là giải quyết bản chất đa sản phẩm của đơn hàng: 119,101 dòng giao dịch thuộc 50,000 đơn hàng duy nhất, do đó **khóa khử trùng lặp bắt buộc phải là khóa phức hợp `(order_id, product_id)`**.
+#### 📋 Bảng Kiểm Toán Nạp Dữ Liệu Từ Google Drive Vào Tầng Bronze:
+| Nguồn Google Drive | Bảng Đích (`schema_bronze`) | Số Dòng Nạp | Định Dạng | Thời Gian | Nền Tảng Nguồn | Trạng Thái |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `FILE_ID_SALES_TRANSACTIONS` | `sales_transactions` | **119,101** | CSV (20.6 MB) | 28.5s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_SALES_TARGET` | `sales_targets_raw` | **1,955** | XLSX (3 Sheets) | 2.1s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_CUSTOMERS` | `customers` | **2,000** | CSV (375 KB) | 1.2s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_PRODUCTS` | `products` | **85** | XLSX (11 KB) | 0.8s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_DISTRIBUTOR_ORDERS` | `distributor_orders` | **8,000** | XLSX (3.5 MB) | 4.3s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_DISTRIBUTORS` | `distributors` | **138** | CSV (29 KB) | 0.9s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_EMPLOYEES` | `employees` | **150** | XLSX (34 KB) | 1.1s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_TERRITORY` | `territory` | **63** | XLSX (69 KB) | 0.7s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_RETURNS` | `returns` | **3,665** | CSV (487 KB) | 1.5s | `google_drive` | `SUCCESS` ✅ |
+| `FILE_ID_PROMOTION` | `promotions` | **10** | XLSX (9 KB) | 0.6s | `google_drive` | `SUCCESS` ✅ |
+| **Tổng cộng (10 Nguồn)** | **schema_bronze** | **164,901 rows** | **~25.2 MB** | **44.4s** | **Google Drive API** | **100% Ingested** |
 
-#### 💻 2. Đoạn Code Kỹ thuật Chứng minh (`silver/silver_sales_transactions.sql`):
+---
+
+### 🥈 Tầng 2: Silver Layer (Cleansing, Casting & Deduplication)
+* **Mục tiêu:** Chuyển đổi dữ liệu chuỗi thô từ Bronze thành tập dữ liệu sạch, đúng kiểu dữ liệu nghiệp vụ và đảm bảo tính toàn vẹn tại `schema_silver`.
+* **Kỹ thuật cốt lõi:**
+  * **Composite Key Deduplication:** 119,101 dòng giao dịch thuộc 50,000 đơn hàng duy nhất (1 đơn nhiều sản phẩm). Khóa khử trùng bắt buộc phải là cặp `(order_id, product_id)`.
+  * **Data Standardization:** Chuẩn hóa chuỗi bằng `TRIM`, `UPPER`, `INITCAP`. Ép kiểu ngày ISO-8601 `YYYY-MM-DD` và tiền tệ `NUMERIC(15,2)`.
+  * **Business Rule Validation:** Loại bỏ các giá trị âm bất hợp lý, kiểm tra ràng buộc `net_amount <= gross_amount`.
+
+#### 🔬 Bảng Minh Họa Biến Đổi Dữ Liệu Thực Tế (Data Transformation Snapshot):
+| Trường Dữ Liệu | Dữ Liệu Thô Tầng Bronze (`raw`) | Xử Lý Kỹ Thuật Ở Silver | Dữ Liệu Chuẩn Hóa Tầng Silver (`clean`) |
+| :--- | :--- | :--- | :--- |
+| `order_id` | `" ORD_2024_001 "` | `TRIM(order_id)` | `'ORD_2024_001'` (Khóa sạch) |
+| `order_date` | `"2024/03/15"` / `"15-03-2024"` | `TO_DATE(NULLIF(...), 'YYYY-MM-DD')` | `2024-03-15` (Kiểu `DATE`) |
+| `quantity` | `" 15 "` (Chuỗi có space) | `NULLIF(TRIM(quantity), '')::NUMERIC`| `15.00` (Kiểu `NUMERIC`) |
+| `tax_code` | `NULL` (Thiếu 51.75%) | `COALESCE(tax_code, 'UNREGISTERED')` | `'UNREGISTERED'` (Chuẩn hóa) |
+| `delivery_status` | `"delivered "` / `"DELIVERED"` | `INITCAP(TRIM(delivery_status))` | `'Delivered'` (Đồng nhất) |
+| `_dedup_flag` | 2 dòng cùng `(order_id, sku)` | `ROW_NUMBER() OVER (...) = 1` | Giữ bản ghi mới nhất (**rn = 1**) |
+
+<details>
+<summary><b>🔍 Xem câu lệnh SQL khử trùng lặp và làm sạch tại tầng Silver (Click để mở rộng)</b></summary>
+
 ```sql
 -- Trích đoạn từ silver/silver_sales_transactions.sql
 DROP TABLE IF EXISTS schema_silver.sales_transactions;
@@ -239,44 +302,53 @@ SELECT
 FROM dedup
 WHERE rn = 1;
 ```
-
-#### 📊 3. Dữ liệu Thực chứng & Bảng Kiểm toán:
-**Bảng đối soát chất lượng dữ liệu Before vs After:**
-
-| Tiêu Chí Kiểm Toán | Dữ Liệu Thô Tầng Bronze | Dữ Liệu Chuẩn Hóa Tầng Silver | Kết Quả Đạt Được |
-| :--- | :---: | :---: | :--- |
-| **Số dòng Sales Transactions** | 119,101 | **119,101 dòng** | Bảo toàn nguyên vẹn 100% dòng sản phẩm |
-| **Bản ghi trùng lặp `(order_id, product_id)`** | Tiềm ẩn do retry | **0 bản ghi trùng** | Kiểm tra `HAVING COUNT(*) > 1` cho kết quả rỗng |
-| **Số đơn hàng duy nhất (`order_id`)** | 50,000 | **50,000 đơn hàng** | Khớp đúng grain 1 đơn gồm 2.38 sản phẩm |
-| **Định dạng trường ngày (`order_date`)** | Chuỗi `TEXT` tự do | `DATE` (ISO-8601) | 100% bản ghi hợp lệ kiểu ngày tháng |
-| **Vi phạm toàn vẹn tiền tệ (`net > gross`)** | Rủi ro sai số | **0 dòng vi phạm** | Kiểm toán `net_amount <= gross_amount` đạt 100% |
-| **Thời gian thực thi tầng Silver** | — | **3.55 giây** | Xử lý 10 kịch bản SQL cực nhanh |
+</details>
 
 ---
 
-### Bước 4: Tầng Gold — Xây Dựng Star Schema, SCD Type 2 & Data Marts
+### 🥇 Tầng 3: Gold Layer (Kimball Star Schema & Analytical Marts)
+* **Mục tiêu:** Mô hình hóa kho dữ liệu theo chuẩn Kimball Star Schema với các Surrogate Keys độc lập, xử lý biến động nhân sự với **SCD Type 2**, và xây dựng Data Marts phục vụ phân tích nghiệp vụ.
+* **Kỹ thuật cốt lõi:**
+  * **Surrogate Key Generation:** Thay thế khóa tự nhiên bằng khóa thay thế số nguyên (`INT`/`BIGSERIAL`) tăng tốc độ JOIN.
+  * **Point-in-Time (AS-OF) Join:** Khi Sales Reps chuyển vùng công tác giữa năm, liên kết đơn hàng với nhân viên theo khoảng ngày `order_date >= effective_date AND order_date < expiry_date` để bảo toàn doanh số lịch sử.
 
-![Bước 4: Gold Kimball Modeling & SCD2](assets/pipeline/step_4_gold_kimball_scd2.png)
+> [!IMPORTANT]
+> **Điểm Sáng Kỹ Thuật: Cơ chế Point-in-Time Join với SCD Type 2 (`dim_employees`)**
+> 
+> Khi nhân viên `EMP042` chuyển từ Miền Bắc sang Miền Nam vào ngày `2024-06-01`:
+> * Đơn hàng phát sinh ngày `2024-03-10` tự động nối với bản ghi có `effective_date = 2024-01-01` $\rightarrow$ Ghi nhận doanh số cho **Miền Bắc**.
+> * Đơn hàng phát sinh ngày `2024-08-20` tự động nối với bản ghi có `effective_date = 2024-06-01` $\rightarrow$ Ghi nhận doanh số cho **Miền Nam**.
+> * **Nếu chỉ JOIN thông thường theo `is_current = TRUE`**, toàn bộ doanh số quý 1 của Miền Bắc sẽ bị dồn sai sang Miền Nam!
 
-#### 🎯 1. Mục tiêu & Bài toán giải quyết:
-Xây dựng mô hình dữ liệu đa chiều theo chuẩn Kimball Star Schema. Thách thức lớn nhất là xử lý biến động nhân sự: khi một đại diện kinh doanh chuyển vùng công tác giữa năm, **không thể join bằng `is_current = TRUE`** vì sẽ làm sai lệch doanh thu lịch sử. Giải pháp là áp dụng **Point-in-Time (AS-OF) Join** trên khoảng ngày hiệu lực của SCD Type 2.
+```mermaid
+flowchart LR
+    subgraph Record_v1 ["Phiên bản 1 (employee_sk = 101)"]
+        A1["EMP042 — Nguyễn Văn A<br/>Khu vực: Miền Bắc<br/>Hiệu lực: 2024-01-01 ➔ 2024-05-31<br/><b>is_current = FALSE</b>"]
+    end
+    subgraph Record_v2 ["Phiên bản 2 (employee_sk = 205)"]
+        A2["EMP042 — Nguyễn Văn A<br/>Khu vực: Miền Nam<br/>Hiệu lực: 2024-06-01 ➔ Hiện tại<br/><b>is_current = TRUE</b>"]
+    end
+    Record_v1 -->|Sự kiện điều chuyển 01/06/2024| Record_v2
+```
 
-#### 💻 2. Đoạn Code Kỹ thuật Chứng minh (`gold/fact_sales.sql`):
+<details>
+<summary><b>🔍 Xem câu lệnh SQL Point-in-Time Join tạo Fact Sales (Click để mở rộng)</b></summary>
+
 ```sql
--- Trích xuất từ gold/fact_sales.sql: Point-in-Time Join với Dimension SCD Type 2
+-- Trích đoạn từ gold/fact_sales.sql
 DROP TABLE IF EXISTS schema_gold.fact_sales;
 
 CREATE TABLE schema_gold.fact_sales AS
 SELECT
-    -- Degenerate dimensions giữ lại để truy vấn nhanh
+    -- Degenerate Dimensions (Giữ lại khóa nghiệp vụ phục vụ đối soát chi tiết)
     s.order_id,
     s.product_id,
 
-    -- Surrogate Keys (Khóa thay thế nối tới các bảng chiều)
+    -- Surrogate Keys (Khóa thay thế liên kết Star Schema)
     (TO_CHAR(s.order_date, 'YYYYMMDD'))::INT   AS date_id,
     c.customer_sk,
     p.product_sk,
-    e.employee_sk,   -- Nối đúng nhân viên TẠI THỜI ĐIỂM ĐƠN HÀNG PHÁT SINH
+    e.employee_sk,   -- NỐI ĐÚNG NHÂN VIÊN TẠI THỜI ĐIỂM ĐƠN HÀNG PHÁT SINH
 
     s.channel,
     s.region,
@@ -284,7 +356,7 @@ SELECT
     s.delivery_status,
     s.payment_method,
 
-    -- Số đo tài chính (Measures)
+    -- Measures (Số đo tài chính)
     s.quantity,
     s.unit_price,
     s.discount_amount,
@@ -302,108 +374,78 @@ LEFT JOIN schema_gold.dim_employees e
    AND s.order_date >= e.effective_date
    AND (s.order_date < e.expiry_date OR e.expiry_date IS NULL);
 ```
-
-#### 📊 3. Dữ liệu Thực chứng & Bảng Kiểm toán:
-**Bảng thống kê cấu trúc kho dữ liệu Tầng Gold:**
-
-| Bảng Dữ Liệu Tầng Gold | Loại Bảng | Số Dòng Thực Tế | Chỉ Số Nghiệp Vụ / Đo Lường | Vai Trò Trong Mô Hình Star Schema |
-| :--- | :---: | :---: | :---: | :--- |
-| `schema_gold.fact_sales` | Fact | **119,101** | Gross: **163.85B**, Net: **158.96B VND** | Bảng sự kiện trung tâm nối 4 dimensions |
-| `schema_gold.fact_returns` | Fact | **3,665** | Tiền hoàn: **1.31B VND** (3,665 đơn) | Theo dõi tỷ lệ và lý do hàng bán bị trả lại |
-| `schema_gold.fact_distributor_orders`| Fact | **8,000** | Đặt: 9.42M đơn vị, Giao: 7.99M đơn vị | Theo dõi thực hiện đơn hàng bán buôn |
-| `schema_gold.dim_employees` | Dimension | **150** | 111 sales reps (quản lý điều chuyển SCD2) | SCD Type 2: `effective_date`, `expiry_date` |
-| `schema_gold.dim_customers` | Dimension | **2,000** | 2,000 tài khoản khách hàng | Bảng chiều khách hàng phân vùng địa lý |
-| `schema_gold.dim_products` | Dimension | **85** | 85 SKU thuộc 6 ngành hàng | Bảng chiều sản phẩm chuẩn hóa thương hiệu |
-| `schema_gold.dim_distributors` | Dimension | **138** | 138 nhà phân phối khu vực | Bảng chiều nhà phân phối bán buôn |
-| `schema_gold.dim_date` | Dimension | **366** | 366 ngày năm 2024 (năm nhuận) | Trục thời gian chuẩn hóa phân tích MoM/QoQ |
-| **`mart_sales_vs_target`** | Data Mart | **1,332** | Chỉ tiêu: **290.74B**, Đạt: **157.65B VND** | Đối soát KPI nhân viên bán hàng (Đạt 51.19%) |
-| **`mart_distributor_performance`**| Data Mart | **1,480** | Fill Rate: **84.63%**, On-Time: **40.36%** | Đánh giá hiệu suất giao vận nhà phân phối |
+</details>
 
 ---
 
-### Bước 5: Điều Phối Tự Động (Orchestration), Cơ Chế Fail-Fast & Sẵn Sàng Cho BI
+### ⚙️ Điều Phối Toàn Bộ Luồng (Master Orchestration & Fail-Fast Gate)
 
-![Bước 5: Pipeline Orchestration & Observability](assets/pipeline/step_5_orchestration_analytics.png)
+Trình điều phối tập trung `main.py` tự động hóa toàn bộ luồng Cloud Ingestion ➔ Bronze ➔ Silver ➔ Gold với nguyên tắc **Fail-Fast**: nếu tầng Silver thất bại hoặc vi phạm ràng buộc dữ liệu, hệ thống **ngắt ngay lập tức**, không cho phép thực thi tầng Gold để ngăn chặn ô nhiễm dữ liệu báo cáo.
 
-#### 🎯 1. Mục tiêu & Bài toán giải quyết:
-Xây dựng trình điều phối tập trung [main.py](file:///C:/Users/admin/Desktop/Xuân%20Thu/Da_Portfolio/03_Python/medallion-datapipeline/main.py) liên kết 3 tầng Bronze ➔ Silver ➔ Gold với nguyên tắc **Fail-Fast**: nếu tầng Silver gặp lỗi dữ liệu hoặc sai lệch cú pháp, pipeline sẽ **dừng ngay lập tức** và không thực thi tầng Gold nhằm bảo vệ kho dữ liệu phân tích khỏi dữ liệu bẩn.
+> [!NOTE]
+> **Nhật Ký Thực Thi Thực Tế Của Pipeline (`schema_gold.pipeline_logs`):**
+> * 🥉 **STAGE 1 (BRONZE):** 44.40s (10 Google Drive loaders, nạp an toàn 164,901 dòng).
+> * 🥈 **STAGE 2 (SILVER):** 3.55s (10 kịch bản SQL làm sạch, khử trùng lặp).
+> * 🥇 **STAGE 3 (GOLD):** 0.85s (Xây dựng Star Schema và 2 Data Marts).
+> * ⏱️ **Tổng thời gian thực thi:** **~48.80 giây** (100% tự động, Idempotent).
 
-#### 💻 2. Đoạn Code Kỹ thuật Chứng minh (`main.py`):
+<details>
+<summary><b>🔍 Xem code điều phối Fail-Fast trong main.py (Click để mở rộng)</b></summary>
+
 ```python
-# Trích đoạn từ main.py: Cơ chế bẫy lỗi và Fail-Fast Orchestration
-def run_stage(conn, batch_id, stage_name, action):
-    """Thực thi một stage, đo thời gian thực thi và ghi log vào database."""
-    print(f"\n{'=' * 15} {stage_name} {'=' * 15}")
-    start = time.time()
-    try:
-        action()
-        duration = time.time() - start
-        log_pipeline(conn, batch_id, stage_name, "SUCCESS", None, duration)
-        print(f"✅ {stage_name} thành công ({round(duration, 2)}s)")
-        return True
-    except Exception as e:
-        duration = time.time() - start
-        print(f"❌ {stage_name} THẤT BẠI: {e}")
-        traceback.print_exc()
-        log_pipeline(conn, batch_id, stage_name, "FAILED", str(e), duration)
-        return False  # Ngắt pipeline ngay lập tức nếu stage thất bại
-
+# Trích đoạn từ main.py: Cơ chế bẫy lỗi và ngắt pipeline an toàn
 def main():
     batch_id = uuid.uuid4()
-    conn = get_db_connection()
+    conn = get_pg_connection()
 
-    # Stage 1: Bronze Ingestion
-    run_stage(conn, batch_id, "STAGE 1: BRONZE", run_bronze)
+    # Stage 1: Bronze Ingestion (Tự động tải từ Google Drive API)
+    run_stage(conn, batch_id, "BRONZE", run_bronze)
 
     # Stage 2: Silver Cleansing & Dedup
-    silver_ok = run_stage(conn, batch_id, "STAGE 2: SILVER", lambda: run_sql_batch(conn, SILVER_FILES))
+    silver_ok = run_stage(conn, batch_id, "SILVER", lambda: run_sql_batch(conn, SILVER_FILES))
     if not silver_ok:
         print("⛔ DỪNG PIPELINE: Tầng Silver gặp lỗi, hủy thực thi tầng Gold!")
+        conn.close()
         return
 
-    # Stage 3: Gold Modeling & Data Marts (Chỉ chạy khi Silver thành công 100%)
-    run_stage(conn, batch_id, "STAGE 3: GOLD", lambda: run_sql_batch(conn, GOLD_FILES))
+    # Stage 3: Gold Modeling & Marts (Chỉ chạy khi Silver hoàn tất 100%)
+    run_stage(conn, batch_id, "GOLD", lambda: run_sql_batch(conn, GOLD_FILES))
+    conn.close()
 ```
+</details>
 
-#### 📊 3. Dữ liệu Thực chứng & Bảng Kiểm toán:
-**Nhật ký thực thi đo lường từ bảng `schema_gold.pipeline_logs`:**
-
-| Thứ Tự Thực Thi | Tên Giai Đoạn (Stage) | Trạng Thái | Thời Gian Chạy | Số Bảng / Tệp Xử Lý | Cơ Chế Kiểm Soát Lỗi |
-| :---: | :--- | :---: | :---: | :---: | :--- |
-| **Giai đoạn 1** | **STAGE 1: BRONZE** | `SUCCESS` ✅ | **44.40s** | 10 Source Loaders | Ghi log độc lập từng loader vào `ingest_log` |
-| **Giai đoạn 2** | **STAGE 2: SILVER** | `SUCCESS` ✅ | **3.55s** | 10 SQL Scripts | Transaction rollback nếu một bảng lỗi cú pháp |
-| **Giai đoạn 3** | **STAGE 3: GOLD** | `SUCCESS` ✅ | **0.85s** | 10 DDL & Marts | **Fail-Fast Gate**: Chỉ chạy khi Silver thành công |
-| **Toàn bộ Pipeline**| **End-to-End ETL** | `SUCCESS` ✅ | **~48.80s** | **164,901 dòng** | Tự động hóa hoàn toàn, 100% Idempotent |
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-## 3. 📐 Mô Hình Dữ Liệu Kimball Star Schema & Cơ Chế SCD Type 2
+<a id="part-5"></a>
+## 📐 5. Mô Hình Dữ Liệu Tầng Gold (Star Schema)
 
-### 3.1 Sơ đồ Thực thể Quan hệ (Entity-Relationship Diagram)
+Mô hình dữ liệu được tổ chức theo chuẩn **Kimball Dimensional Modeling**, tách biệt rõ ràng các bảng sự kiện (Fact) và các bảng chiều (Dimension) dùng chung (Conformed Dimensions):
 
 ```mermaid
 erDiagram
-    FACT_SALES ||--o{ DIM_CUSTOMERS : "customer_sk"
-    FACT_SALES ||--o{ DIM_PRODUCTS : "product_sk"
-    FACT_SALES ||--o{ DIM_EMPLOYEES : "employee_sk (AS-OF)"
-    FACT_SALES ||--o{ DIM_DATE : "date_id"
-    FACT_RETURNS ||--o{ DIM_CUSTOMERS : "customer_sk"
-    FACT_RETURNS ||--o{ DIM_PRODUCTS : "product_sk"
-    FACT_DISTRIBUTOR_ORDERS ||--o{ DIM_DISTRIBUTORS : "distributor_sk"
+    FACT_SALES }o--|| DIM_CUSTOMERS : "customer_sk"
+    FACT_SALES }o--|| DIM_PRODUCTS : "product_sk"
+    FACT_SALES }o--|| DIM_EMPLOYEES : "employee_sk (AS-OF)"
+    FACT_SALES }o--|| DIM_DATE : "date_id"
+    FACT_RETURNS }o--|| DIM_CUSTOMERS : "customer_sk"
+    FACT_RETURNS }o--|| DIM_PRODUCTS : "product_sk"
+    FACT_DISTRIBUTOR_ORDERS }o--|| DIM_DISTRIBUTORS : "distributor_sk"
 
     FACT_SALES {
         bigint sale_id PK
-        varchar order_id
-        varchar product_id
+        varchar order_id "Degenerate Dim"
+        varchar product_id "Degenerate Dim"
         int date_id FK
         int customer_sk FK
         int product_sk FK
-        int employee_sk FK
+        int employee_sk FK "SCD2 Key"
         numeric quantity
         numeric unit_price
         numeric discount_amount
-        numeric gross_amount
-        numeric net_amount
+        numeric gross_amount "163.85B VND"
+        numeric net_amount "158.96B VND"
         varchar delivery_status
     }
 
@@ -431,8 +473,8 @@ erDiagram
         varchar employee_name
         varchar role
         varchar region
-        date effective_date
-        date expiry_date
+        date effective_date "SCD2 Start"
+        date expiry_date "SCD2 End"
         boolean is_current
     }
 
@@ -445,175 +487,399 @@ erDiagram
     }
 
     DIM_DATE {
-        int date_id PK
+        int date_id PK "YYYYMMDD"
         date date_actual
         int year
         int quarter
         int month
-        varchar month_name
         varchar day_of_week
         boolean is_weekend
     }
 ```
 
-### 3.2 Cơ chế Bảo toàn Lịch sử Nhân viên (SCD Type 2 Timeline)
-Khi đại diện kinh doanh `EMP042` chuyển từ Miền Bắc vào Miền Nam ngày 01/06/2024, thay vì ghi đè địa bàn, hệ thống tạo một surrogate key mới và đóng hiệu lực bản ghi cũ:
-
-```mermaid
-flowchart LR
-    subgraph Record_v1 ["Phiên bản 1 (employee_sk = 101)"]
-        A1["EMP042 — Nguyễn Văn A<br/>Khu vực: Miền Bắc<br/>Hiệu lực: 2024-01-01 ➔ 2024-05-31<br/><b>is_current = FALSE</b>"]
-    end
-    subgraph Record_v2 ["Phiên bản 2 (employee_sk = 205)"]
-        A2["EMP042 — Nguyễn Văn A<br/>Khu vực: Miền Nam<br/>Hiệu lực: 2024-06-01 ➔ Hiện tại<br/><b>is_current = TRUE</b>"]
-    end
-    Record_v1 -->|Sự kiện điều chuyển 01/06/2024| Record_v2
-```
-
-* **Kết quả phân tích:** Đơn hàng phát sinh trong tháng 3/2024 sẽ tự động liên kết với `employee_sk = 101` (ghi nhận doanh số cho Miền Bắc); đơn hàng tháng 8/2024 nối với `employee_sk = 205` (ghi nhận doanh số cho Miền Nam). Loại bỏ 100% sai lệch khi tính thưởng KPI.
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-## 4. 📊 Phát Hiện Kinh Doanh Cốt Lõi Từ Data Marts Tầng Gold
+<a id="part-6"></a>
+## 🛒 6. Thiết Kế & Diễn Giải Chi Tiết 2 Data Marts Tầng Gold
 
-Từ các Data Marts phân tích tổng hợp ở tầng Gold, các phát hiện nghiệp vụ then chốt đã được định lượng rõ ràng:
-
-### 1. Thiếu hụt Chỉ tiêu Kinh doanh Trầm trọng (Quota Gap)
-* **Chỉ tiêu Doanh số giao:** **290.74 Tỷ VNĐ**.
-* **Doanh số thuần thực đạt:** **157.65 Tỷ VNĐ** $\rightarrow$ Tỷ lệ hoàn thành bình quân toàn công ty chỉ đạt **51.19%** (Thiếu hụt **133.09 Tỷ VNĐ**).
-* **Phân hóa theo đội ngũ:** Chỉ có **14 trên tổng số 111 Sales Reps (12.6%)** đạt mốc $>80\%$ chỉ tiêu. Nguyên nhân cốt lõi do hạn mức phân bổ đầu năm (`Plan_v1`) đặt kỳ vọng tăng trưởng quá cao (+65% YoY) mà không tính đến sức mua suy giảm của thị trường.
-
-### 2. Điểm Nghẽn Giao Vận Nhà Phân Phối (Fulfillment Bottleneck)
-* **Tỷ lệ giao đủ hàng (Fill Rate):** Đạt **84.63%** (Tổng đặt 9.42 triệu đơn vị, thực giao 7.99 triệu đơn vị $\rightarrow$ Hụt **1.43 triệu đơn vị hàng hóa**).
-* **Tỷ lệ giao đúng hạn (On-Time SLA):** Chỉ đạt **40.36%**, độ trễ giao hàng bình quân là **2.8 ngày**. Việc giao hàng trễ khiến các cửa hàng bán lẻ nhỏ hết hàng trên kệ (out-of-stock), đẩy khách hàng sang mua sản phẩm của đối thủ cạnh tranh.
-
-### 3. Tỷ lệ Hàng Trả lại Tập trung theo Ngành Hàng (Returns Concentration)
-* Tổng giá trị hàng bán trả lại là **1.31 Tỷ VNĐ** qua **3,665 đơn hoàn**.
-* Ngành hàng Thực phẩm & Đồ uống đóng chai chiếm tới **68.4% tổng giá trị hoàn** do quy định khắt khe về hạn sử dụng còn lại khi nhập vào hệ thống siêu thị.
-
----
-
-## 5. 🎯 Ma Trận Hành Động Chiến Lược Ưu Tiên (Action Matrix P1–P4)
+Ở tầng cao nhất của kho dữ liệu, hệ thống không để công cụ BI phải tự JOIN các bảng Fact và Dimension đồ sộ (tránh làm chậm Dashboard và sai lệch công thức). Thay vào đó, pipeline đóng gói sẵn **2 Data Marts chuyên biệt** phục vụ trực tiếp cho các câu hỏi phân tích của Ban Giám Đốc và các Trưởng phòng nghiệp vụ:
 
 ```mermaid
 flowchart TD
-    subgraph Matrix["🎯 Ma Trận Hành Động Điều Hành Sau Pipeline"]
-        direction TB
-
-        subgraph P1["🚨 P1: Tái Cấu Trúc Chỉ Tiêu Bán Hàng & Cơ Chế Thưởng (Tháng 1-2)"]
-            P1_act["• Áp dụng số liệu mart_sales_vs_target để điều chỉnh hạn mức KPI quý sát thực tế.<br/>• Hạ tỷ trọng chỉ tiêu doanh số gộp, tăng thưởng cho việc giữ chân khách hàng cũ."]
-        end
-
-        subgraph P2["📦 P2: Tối Ưu Hóa Chuỗi Cung Ứng & Nâng Chuẩn SLA Giao Vận (Tháng 2-3)"]
-            P2_act["• Thiết lập cảnh báo tự động khi Fill Rate của NPP giảm xuống dưới 90%.<br/>• Phạt hợp đồng đối với các NPP có tỷ lệ giao trễ hạn vượt quá 3 ngày liên tiếp."]
-        end
-
-        subgraph P3["💰 P3: Giám Sát Chiết Khấu Thương Mại & Thu Hồi Công Nợ (Tháng 3-4)"]
-            P3_act["• Rà soát các chương trình chiết khấu 4.89 tỷ VNĐ, loại bỏ chiết khấu chồng chéo.<br/>• Kiểm soát chặt chẽ điều khoản thanh toán COD đối với các đơn hàng trên 50 triệu."]
-        end
-
-        subgraph P4["📈 P4: Kết Nối Trực Tiếp Power BI Phục Vụ Ban Giám Đốc (Tháng 4)"]
-            P4_act["• Mở kết nối DirectQuery / Scheduled Refresh từ schema_gold vào file VietDist_Corporation.pbix.<br/>• Xây dựng Executive Dashboard theo dõi biến động doanh thu theo thời gian thực."]
-        end
+    subgraph Facts ["Kho Fact & Dimension Chuẩn Hóa"]
+        F1["fact_sales<br/>(119.1K rows)"]
+        F2["fact_targets<br/>(Multi-version)"]
+        F3["fact_returns<br/>(3.6K rows)"]
+        F4["distributor_orders<br/>(8K rows)"]
+        D1["dim_employees (SCD2)"]
+        D2["dim_distributors"]
+        D3["dim_date"]
     end
 
-    P1 --> P2 --> P3 --> P4
+    subgraph Marts ["🥇 BUSINESS DATA MARTS (Pre-aggregated)"]
+        M1["<b>mart_sales_vs_target</b><br/>• Grain: Nhân viên - Năm - Tháng<br/>• Multi-version Target Ranking<br/>• Net Sales sau hoàn hàng"]
+        M2["<b>mart_distributor_performance</b><br/>• Grain: NPP - Năm - Tháng<br/>• Fill Rate % (Giao đủ)<br/>• On-Time SLA % (Đúng hạn)"]
+    end
+
+    subgraph BI ["📊 BI & EXECUTIVE DASHBOARDS"]
+        B1["Sales Incentive & Quota Attainment"]
+        B2["Supply Chain & Logistics SLA Monitoring"]
+    end
+
+    F1 & F2 & F3 & D1 & D3 ==> M1
+    F4 & D2 & D3 ==> M2
+    M1 --> B1
+    M2 --> B2
+
+    style M1 fill:#065f46,stroke:#10b981,color:#ffffff,stroke-width:2px
+    style M2 fill:#1e40af,stroke:#3b82f6,color:#ffffff,stroke-width:2px
 ```
 
 ---
 
-## 6. 🚀 Cấu Trúc Thư Mục & Hướng Dẫn Thực Thi (Quickstart)
+### 6.1 Data Mart 1: `schema_gold.mart_sales_vs_target` (Đối Soát KPI Kinh Doanh)
+* **Bài toán nghiệp vụ:** Giám đốc Kinh doanh cần đánh giá công bằng hiệu suất của từng Sales Rep, tính thưởng hoa hồng chính xác dựa trên doanh số thực thu và chỉ tiêu được giao mới nhất.
+* **Grain (Độ mịn dữ liệu):** **1 dòng duy nhất cho mỗi bộ `(employee_sk, year, month)`** (Nhân viên kinh doanh - Năm - Tháng). Tổng cộng: **1,332 dòng phân tích**.
+* **Thách thức kỹ thuật & Giải pháp:**
+  1. **Xử lý Multi-version Targets:** Một nhân viên trong 1 tháng có thể có nhiều phiên bản chỉ tiêu (`v1_Original`, `v2_Review`, `v3_Q4Push`). Dùng Window Function `ROW_NUMBER() OVER (PARTITION BY employee_sk, year, month ORDER BY version_date DESC NULLS LAST, plan_version DESC)` để chỉ lấy **phiên bản mới nhất** phục vụ đánh giá KPI.
+  2. **Trừ hàng bán bị trả lại (True Net Sales):** Nếu chỉ lấy doanh thu từ `fact_sales`, nhân viên có thể bán hàng ảo rồi khách trả lại vào cuối tháng. Mart tự động tính:
+     $$\text{Actual Revenue} = \text{Gross Actual Revenue (fact\_sales)} - \text{Total Return Amount (fact\_returns)}$$
+  3. **FULL OUTER JOIN:** Đảm bảo không bỏ sót nhân viên được giao chỉ tiêu nhưng không bán được gì (đạt 0%), hoặc nhân viên mới bán được hàng nhưng chưa kịp giao chỉ tiêu.
 
-### 6.1 Cấu trúc Thư mục Dự án
+#### 📋 Mẫu Dữ Liệu Thực Tế Trích Xuất Từ `mart_sales_vs_target`:
+| Mã NV | Tên Nhân Viên | Khu Vực | Năm | Tháng | Phiên Bản | Chỉ Tiêu (Target) | Doanh Số Bán | Tiền Hàng Hoàn | Doanh Thu Ròng Thực Đạt | Tỷ Lệ Hoàn Thành (%) |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `EMP1001` | Hồ Thị Bình | MIỀN BẮC | 2024 | 1 | `v1` | **359.50 Tr** | 0.00 Tr | 0.00 Tr | **0.00 Tr** | **0.00%** ⚠️ |
+| `EMP1002` | Ngô Thị Hà | MIỀN BẮC | 2024 | 1 | `v1` | **271.10 Tr** | 164.37 Tr | 2.10 Tr | **162.27 Tr** | **59.86%** |
+| `EMP1003` | Phạm Bá Bình | MIỀN BẮC | 2024 | 1 | `v1` | **343.30 Tr** | 132.84 Tr | 0.57 Tr | **132.27 Tr** | **38.53%** |
+
+<details>
+<summary><b>🔍 Xem câu lệnh SQL xây dựng mart_sales_vs_target (Click để mở rộng)</b></summary>
+
+```sql
+-- Trích đoạn từ gold/mart_sales_vs_target.sql
+DROP TABLE IF EXISTS schema_gold.mart_sales_vs_target;
+
+CREATE TABLE schema_gold.mart_sales_vs_target AS
+WITH latest_target AS (
+    SELECT *,
+        ROW_NUMBER() OVER (
+            PARTITION BY employee_sk, year, month
+            ORDER BY version_date DESC NULLS LAST, plan_version DESC
+        ) AS rn
+    FROM schema_gold.fact_targets
+    WHERE employee_sk IS NOT NULL
+),
+target_final AS (
+    SELECT employee_sk, year, month, region, team, plan_version,
+           target_revenue, target_quantity, target_new_customers
+    FROM latest_target WHERE rn = 1
+),
+actual_sales AS (
+    SELECT f.employee_sk, d.year, d.month,
+           SUM(f.net_amount)              AS actual_revenue,
+           SUM(f.quantity)                AS actual_quantity,
+           COUNT(DISTINCT f.customer_sk)  AS actual_customers
+    FROM schema_gold.fact_sales f
+    JOIN schema_gold.dim_date d ON f.date_id = d.date_id
+    WHERE f.employee_sk IS NOT NULL
+    GROUP BY f.employee_sk, d.year, d.month
+),
+actual_returns AS (
+    SELECT r.employee_sk, d.year, d.month,
+           SUM(r.return_amount) AS total_return_amount
+    FROM schema_gold.fact_returns r
+    JOIN schema_gold.dim_date d ON r.date_id = d.date_id
+    WHERE r.employee_sk IS NOT NULL
+    GROUP BY r.employee_sk, d.year, d.month
+),
+combined AS (
+    SELECT COALESCE(t.employee_sk, a.employee_sk)   AS employee_sk,
+           COALESCE(t.year, a.year)                 AS year,
+           COALESCE(t.month, a.month)               AS month,
+           t.plan_version, t.region, t.team,
+           t.target_revenue, a.actual_revenue, a.actual_quantity, a.actual_customers
+    FROM target_final t
+    FULL OUTER JOIN actual_sales a
+        ON t.employee_sk = a.employee_sk AND t.year = a.year AND t.month = a.month
+)
+SELECT
+    c.employee_sk, de.employee_id, de.full_name, c.year, c.month, c.plan_version,
+    COALESCE(c.region, de.region)             AS region,
+    COALESCE(c.team, de.team)                 AS team,
+    COALESCE(c.target_revenue, 0)             AS target_revenue,
+    COALESCE(c.actual_revenue, 0)             AS gross_actual_revenue,
+    COALESCE(ar.total_return_amount, 0)       AS actual_return_amount,
+    -- Doanh thu ròng thực sự sau khi trừ hàng hoàn
+    COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0) AS actual_revenue,
+    (COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0)) - COALESCE(c.target_revenue, 0) AS revenue_gap,
+    CASE
+        WHEN COALESCE(c.target_revenue, 0) = 0 THEN NULL
+        ELSE ROUND((COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0)) / c.target_revenue * 100, 2)
+    END                                        AS revenue_achievement_pct,
+    COALESCE(c.actual_quantity, 0)            AS actual_quantity,
+    COALESCE(c.actual_customers, 0)           AS actual_customers,
+    NOW() AS _loaded_at
+FROM combined c
+LEFT JOIN actual_returns ar
+    ON c.employee_sk = ar.employee_sk AND c.year = ar.year AND c.month = ar.month
+LEFT JOIN schema_gold.dim_employees de
+    ON de.employee_sk = c.employee_sk;
+```
+</details>
+
+---
+
+### 6.2 Data Mart 2: `schema_gold.mart_distributor_performance` (Đo Lường Hiệu Suất Chuỗi Cung Ứng)
+* **Bài toán nghiệp vụ:** Giám đốc Vận hành (COO) cần theo dõi sát sao năng lực giao vận của 138 Nhà phân phối độc quyền: Có giao đủ số lượng hàng đã đặt không? Tỷ lệ giao hàng đúng cam kết SLA đạt bao nhiêu %?
+* **Grain (Độ mịn dữ liệu):** **1 dòng duy nhất cho mỗi bộ `(distributor_sk, year, month)`** (Nhà phân phối - Năm - Tháng). Tổng cộng: **1,480 dòng phân tích**.
+* **Các chỉ số phái sinh cốt lõi:**
+  1. **Tỷ lệ giao đủ hàng (Average Fill Rate %):**
+     $$\text{Fill Rate} = \frac{\sum \text{qty\_delivered}}{\sum \text{qty\_ordered}} \times 100\%$$
+     Đo lường mức độ hụt hàng tồn kho gây đứt gãy chuỗi cung ứng.
+  2. **Tỷ lệ giao đúng hạn SLA (On-Time Delivery Rate %):**
+     $$\text{On-Time Delivery Rate} = \frac{\text{Số đơn giao đúng hạn}}{\text{Tổng số đơn giao}} \times 100\%$$
+     Sử dụng điều kiện lọc `COUNT(*) FILTER (WHERE UPPER(ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))`.
+
+#### 📋 Mẫu Dữ Liệu Thực Tế Trích Xuất Từ `mart_distributor_performance`:
+| Mã NPP | Tên Nhà Phân Phối | Cấp Phân Phối | Khu Vực | Năm | Tháng | Tổng Đơn Hàng | Sản Lượng Đặt | Sản Lượng Giao | Tỷ Lệ Giao Đủ (Fill Rate) | Tỷ Lệ Đúng Hạn (SLA %) |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `DIST0001` | Công ty CP Trần Minh Hải Dịch vụ | ĐẠI LÝ CẤP 2 | MIỀN BẮC | 2024 | 1 | 5 đơn | 4,357 sp | 3,736 sp | **85.09%** | **54.55%** |
+| `DIST0002` | Công ty CP Lê Công Mai Thương mại | ĐIỂM BÁN LẺ | MIỀN BẮC | 2024 | 1 | 4 đơn | 3,635 sp | 3,254 sp | **90.53%** | **42.86%** |
+| `DIST0003` | Công ty TNHH Nguyễn Công Khoa | ĐIỂM BÁN LẺ | MIỀN BẮC | 2024 | 1 | 4 đơn | 3,975 sp | 3,313 sp | **85.21%** | **53.33%** |
+
+<details>
+<summary><b>🔍 Xem câu lệnh SQL xây dựng mart_distributor_performance (Click để mở rộng)</b></summary>
+
+```sql
+-- Trích đoạn từ gold/mart_distributor_performance.sql
+DROP TABLE IF EXISTS schema_gold.mart_distributor_performance;
+
+CREATE TABLE schema_gold.mart_distributor_performance AS
+SELECT
+    dd.distributor_sk,
+    dd.distributor_id,
+    dd.distributor_name,
+    dd.tier,
+    dd.region,
+    d.year,
+    d.month,
+
+    COUNT(DISTINCT o.order_id)                       AS total_orders,
+    SUM(o.qty_ordered)                               AS total_qty_ordered,
+    SUM(o.qty_delivered)                             AS total_qty_delivered,
+    SUM(o.gross_amount)                              AS total_gross_amount,
+    SUM(o.delivered_amount)                          AS total_delivered_amount,
+    ROUND(AVG(o.fill_rate_pct), 2)                   AS avg_fill_rate_pct,
+
+    ROUND(
+        100.0 * COUNT(*) FILTER (WHERE UPPER(o.ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))
+        / NULLIF(COUNT(*), 0)
+    , 2)                                             AS ontime_delivery_rate_pct,
+
+    NOW() AS _loaded_at
+FROM schema_silver.distributor_orders o
+JOIN schema_gold.dim_date d
+    ON (TO_CHAR(o.order_date, 'YYYYMMDD'))::INT = d.date_id
+LEFT JOIN schema_gold.dim_distributors dd
+    ON o.distributor_id = dd.distributor_id
+   AND o.order_date >= dd.effective_date
+   AND (o.order_date <= dd.expiry_date OR dd.expiry_date IS NULL)
+GROUP BY dd.distributor_sk, dd.distributor_id, dd.distributor_name, dd.tier, dd.region, d.year, d.month;
+```
+</details>
+
+[⬆ Quay lại đầu trang](#top)
+
+---
+
+<a id="part-7"></a>
+## 🛡️ 7. Bộ Quy Tắc Kiểm Định Chất Lượng Dữ Liệu (Data Quality Gates)
+
+Để đảm bảo kho dữ liệu luôn đạt tiêu chuẩn tin cậy cao nhất trước khi phân tích, pipeline áp dụng **5 cổng kiểm định chất lượng tự động (Data Quality Assertions)**:
+
+| Cổng Kiểm Định (Quality Gate) | Cấp Độ Kiểm Tra | Quy Tắc Kiểm Tra (Assertion Rule) | Kết Quả Thực Tế Đạt Được |
+| :--- | :---: | :--- | :---: |
+| **1. Uniqueness Gate** | Tầng Silver | Khóa phức hợp `(order_id, product_id)` không được trùng lặp. | **0 bản ghi trùng** (`HAVING COUNT(*) > 1` = 0) |
+| **2. Not-Null Integrity Gate** | Tầng Silver | Khóa chính và các trường bắt buộc không được mang giá trị NULL. | **100% Not-Null** trên các trường định danh |
+| **3. Financial Balance Gate** | Tầng Silver | Doanh thu thuần `net_amount` phải nhỏ hơn hoặc bằng `gross_amount`. | **0 dòng vi phạm** (`net_amount <= gross_amount`) |
+| **4. Referential Integrity** | Tầng Gold | Không có bản ghi mồ côi (Orphan records) giữa Fact và Dimension. | **100% Foreign Keys hợp lệ** nối tới surrogate keys |
+| **5. SCD2 Date Overlap Gate** | Tầng Gold | Khoảng ngày hiệu lực `[effective_date, expiry_date)` không chồng lấn. | **100% dòng nhân viên liên tục, không chồng lấn** |
+
+---
+
+### ⚡ So Sánh Hiệu Năng: Medallion PostgreSQL vs Power Query Truyền Thống
+
+| Tiêu Chí Đánh Giá | Xử Lý Thô Trên Power Query / DAX ❌ | Xử Lý Qua Medallion Data Marts Trên PostgreSQL ✅ |
+| :--- | :--- | :--- |
+| **Thời gian làm mới (Refresh Time)** | Mất **15 – 30 phút** (Power Query phải nạp 25MB từ Google Drive và xử lý M-code phức tạp). | **Chỉ mất < 10 giây** (Power BI chỉ nạp 2 bảng Marts đã tổng hợp sẵn 1,332 & 1,480 dòng). |
+| **Độ phức tạp của công thức DAX** | Cần DAX lồng ghép nhiều tầng (`CALCULATE`, `FILTER`, `EARLIER`) để trừ hàng hoàn và lọc version. | **DAX cực kỳ tinh giản** (`SUM(actual_revenue)`, `AVERAGE(avg_fill_rate_pct)`). |
+| **Tính nhất quán (Single Source of Truth)** | Rủi ro sai lệch số liệu khi mỗi phòng ban tự viết công thức DAX riêng trên máy cá nhân. | **Nhất quán 100%** trên toàn doanh nghiệp nhờ logic đóng gói tập trung ở Data Warehouse. |
+| **Tải tài nguyên hệ thống (Client Impact)** | Chiếm dụng RAM máy người dùng, dễ gây treo đơ Power BI Desktop. | **Toàn bộ tính toán được Database xử lý**, hỗ trợ mượt mà cả DirectQuery và Scheduled Import. |
+
+[⬆ Quay lại đầu trang](#top)
+
+---
+
+<a id="part-8"></a>
+## 📊 8. Phát Hiện Kinh Doanh Cốt Lõi Từ Data Marts
+
+Sau khi hoàn thiện Data Warehouse, dữ liệu tại 2 Data Marts phân tích chuyên dụng mang lại các phát hiện định lượng đắt giá:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        📊 BỘ CHỈ SỐ KINH DOANH THỰC CHỨNG 2024                         │
+├───────────────────────────────┬───────────────────────────────┬────────────────────────┤
+│     TỔNG DOANH THU THUẦN      │     TỶ LỆ ĐẠT CHỈ TIÊU KPI    │     TỶ LỆ GIAO ĐỦ HÀNG │
+│       158.96 TỶ VNĐ           │            51.19%             │             84.63%     │
+│   (Gross: 163.85B | C/Khấu: 4.89B)│   (Thực tế 157.65B / 290.74B) │   (Hụt 1.43M đơn vị giao)  │
+└───────────────────────────────┴───────────────────────────────┴────────────────────────┘
+```
+
+### 1. Hụt Chỉ tiêu Doanh số (Quota Gap) — `mart_sales_vs_target`
+* **Doanh số giao vs Thực đạt:** Chỉ tiêu giao **290.74 Tỷ VNĐ**, thực tế chỉ đạt **157.65 Tỷ VNĐ** $\rightarrow$ **Tỷ lệ hoàn thành toàn công ty chỉ đạt 51.19%** (Hụt 133.09 Tỷ VNĐ).
+* **Phân hóa đội ngũ:** Chỉ **14/111 Sales Reps (12.6%)** đạt mốc $>80\%$ chỉ tiêu. Nguyên nhân do hạn mức đầu năm đặt kỳ vọng quá cao (+65% YoY) mà không tính đến sức mua suy giảm.
+
+### 2. Điểm Nghẽn Giao Vận Nhà Phân Phối — `mart_distributor_performance`
+* **Tỷ lệ giao đủ hàng (Fill Rate):** Đạt **84.63%** (Đặt 9.42 triệu đơn vị, thực giao 7.99 triệu đơn vị $\rightarrow$ Hụt **1.43 triệu sản phẩm**).
+* **Tỷ lệ giao đúng hạn (On-Time SLA):** Chỉ đạt **40.36%**, trễ hạn giao bình quân **2.8 ngày**, gây đứt gãy nguồn cung tại các cửa hàng bán lẻ nhỏ lẻ.
+
+### 3. Tỷ lệ Hàng Trả lại Tập trung — `fact_returns`
+* Tổng giá trị hàng bán bị trả lại là **1.31 Tỷ VNĐ** (3,665 giao dịch hoàn). Trong đó, ngành hàng Thực phẩm & Đồ uống đóng chai chiếm **68.4% giá trị hoàn** do áp lực về hạn sử dụng cận date khi giao vào chuỗi siêu thị.
+
+[⬆ Quay lại đầu trang](#top)
+
+---
+
+<a id="part-9"></a>
+## 🚀 9. Cấu Trúc Thư Mục & Hướng Dẫn Thực Thi
+
+### 9.1 Cấu trúc Thư mục Dự án
 ```
 medallion-datapipeline/
-├── assets/
-│   └── pipeline/                               # 5 Hình ảnh infographic trực quan cho từng bước
-│       ├── generate_pipeline_infographics.py   # Script tạo bộ ảnh trực quan tự động
-│       ├── step_1_architecture_blueprint.png   # Ảnh Bước 1: Topology Medallion
-│       ├── step_2_bronze_ingestion_profiling.png# Ảnh Bước 2: Ingestion & Profiling
-│       ├── step_3_silver_cleansing_normalization.png # Ảnh Bước 3: Cleansing & Dedup
-│       ├── step_4_gold_kimball_scd2.png        # Ảnh Bước 4: Kimball Star & SCD2
-│       └── step_5_orchestration_analytics.png  # Ảnh Bước 5: Orchestration & Data Marts
-├── config/                                     # Cấu hình kết nối hệ thống
-├── gold/                                       # 10 Kịch bản SQL tầng Gold (Star Schema & Marts)
-│   ├── dim_customers.sql
-│   ├── dim_date.sql
-│   ├── dim_distributors.sql
-│   ├── dim_employees.sql                       # SCD Type 2 logic
-│   ├── dim_products.sql
+├── config/                      # Chứa khóa GCP Service Account Key (.json)
+├── gold/                        # 10 Kịch bản DDL & DML Tầng Gold (Star Schema & Marts)
+│   ├── dim_customers.sql        # Dimension khách hàng
+│   ├── dim_date.sql             # Trục thời gian 366 ngày
+│   ├── dim_distributors.sql     # Dimension nhà phân phối
+│   ├── dim_employees.sql        # Quản lý lịch sử điều chuyển SCD Type 2
+│   ├── dim_products.sql         # Dimension sản phẩm
 │   ├── fact_distributor_orders.sql
-│   ├── fact_returns.sql
-│   ├── fact_sales.sql                          # Point-in-Time Join
-│   ├── mart_distributor_performance.sql        # Data Mart vận hành NPP
-│   └── mart_sales_vs_target.sql                # Data Mart KPI bán hàng
-├── loader/                                     # 10 Module Python nạp dữ liệu tầng Bronze
-│   ├── load_sales_transaction.py               # Chunked streaming loader
-│   ├── load_sales_target.py                    # Multi-version target unpivoter
-│   ├── profilling.py                           # Automated data profiler
-│   └── ... (các loader còn lại)
-├── silver/                                     # 10 Kịch bản SQL làm sạch tầng Silver
-│   ├── silver_sales_transactions.sql           # Composite key deduplication
-│   ├── silver_customers.sql                    # Clean tax_code, normalize string
-│   └── ... (các script silver còn lại)
-├── utils/                                      # Tiện ích kết nối Database & Google Drive API
-├── VietDist_SampleData/                        # 10 Tập tin dữ liệu mẫu đầu vào (CSV & XLSX)
-├── .env.example                                # Mẫu file cấu hình biến môi trường
-├── init_db.sql                                 # Khởi tạo schemas Medallion và cấu trúc ban đầu
-├── main.py                                     # Orchestrator tập trung điều phối 3 tầng
-├── Profiling_Report.xlsx                       # Báo cáo kiểm toán chất lượng dữ liệu chi tiết
-├── README.md                                   # Tài liệu báo cáo hoàn chỉnh dự án
-├── requirements.txt                            # Thư viện Python phụ thuộc
-└── VietDist_Corporation.pbix                   # File thiết kế báo cáo Power BI
+│   ├── fact_returns.sql         # Fact hàng trả lại
+│   ├── fact_sales.sql           # Fact giao dịch bán hàng (Point-in-Time Join)
+│   ├── mart_distributor_performance.sql # Data Mart hiệu suất giao vận
+│   └── mart_sales_vs_target.sql # Data Mart đối soát KPI bán hàng
+├── loader/                      # 10 Module Python nạp dữ liệu Tầng Bronze từ Google Drive
+│   ├── load_sales_transaction.py# Chunked streaming loader cho file 20.6 MB
+│   ├── load_sales_target.py     # Unpivot 3 sheet phiên bản kế hoạch
+│   ├── profilling.py            # Script kiểm toán chất lượng dữ liệu tự động
+│   └── ...                      # Các loader còn lại
+├── silver/                      # 10 Kịch bản SQL làm sạch Tầng Silver
+│   ├── silver_sales_transactions.sql # Khử trùng lặp khóa phức hợp
+│   ├── silver_customers.sql     # Xử lý tax_code NULL, chuẩn hóa chuỗi
+│   └── ...                      # Các script silver còn lại
+├── utils/                       # Module kết nối PostgreSQL & Google Drive API v3
+│   ├── db_utils.py              # Xử lý Service Account, BytesIO Streaming, Database Engine
+│   └── file_parser.py           # Phân tích luồng nhị phân, xử lý BOM UTF-8-SIG
+├── VietDist_SampleData/         # 10 Tập tin dữ liệu mẫu dự phòng cục bộ (CSV & XLSX)
+├── .env.example                 # Mẫu cấu hình môi trường & Google Drive File IDs
+├── init_db.sql                  # Khởi tạo 3 schemas Medallion và bảng ingest_log
+├── main.py                      # Orchestrator trung tâm điều phối 3 tầng (Fail-Fast)
+├── Profiling_Report.xlsx        # Báo cáo kiểm toán chất lượng dữ liệu
+├── README.md                    # Tài liệu kỹ thuật dự án
+└── requirements.txt             # Thư viện phụ thuộc (google-api-python-client, psycopg2, pandas)
 ```
 
-### 6.2 Hướng dẫn Cài đặt & Chạy Pipeline
+### 9.2 Hướng Dẫn Cài Đặt & Chạy Pipeline
 
-#### 1. Sao chép Kho mã nguồn
+#### Bước 1: Sao chép mã nguồn & Cài đặt môi trường
 ```bash
 git clone https://github.com/thunx280-ctrl/medallion-datapipeline.git
 cd medallion-datapipeline
-```
 
-#### 2. Khởi tạo Môi trường Ảo & Cài đặt Thư viện
-```bash
-# Windows (PowerShell)
+# Tạo và kích hoạt môi trường ảo
 python -m venv venv
-.\venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1    # Trên Windows
+# source venv/bin/activate     # Trên Linux/macOS
 
-# Linux / macOS
-python3 -m venv venv
-source venv/bin/activate
-
+# Cài đặt thư viện phụ thuộc
 pip install -r requirements.txt
 ```
 
-#### 3. Cấu hình Cơ sở Dữ liệu PostgreSQL
-Tạo file `.env` từ mẫu `.env.example`:
+#### Bước 2: Cấu hình Google Drive Service Account & Database
+1. Đặt file khóa GCP Service Account JSON vào thư mục `config/`.
+2. Tạo file `.env` từ file `.env.example` và điền cấu hình:
 ```env
+# PostgreSQL Database
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=vietdist_db
 DB_USER=postgres
-DB_PASSWORD=your_secure_password
+DB_PASSWORD=your_password
+
+# Google Drive API Configuration
+GOOGLE_SERVICE_ACCOUNT_KEY=config/your_service_account_key.json
+GOOGLE_DRIVE_FOLDER_ID=your_google_drive_folder_id
+
+# 10 Source File IDs trên Google Drive
+FILE_ID_SALES_TRANSACTIONS=your_file_id_sales_transactions
+FILE_ID_SALES_TARGET=your_file_id_sales_target
+FILE_ID_CUSTOMERS=your_file_id_customers
+FILE_ID_PRODUCTS=your_file_id_products
+FILE_ID_DISTRIBUTOR_ORDERS=your_file_id_distributor_orders
+FILE_ID_DISTRIBUTORS=your_file_id_distributors
+FILE_ID_EMPLOYEES=your_file_id_employees
+FILE_ID_TERRITORY=your_file_id_territory
+FILE_ID_RETURNS=your_file_id_returns
+FILE_ID_PROMOTION=your_file_id_promotion
 ```
 
-Khởi tạo cấu trúc các schema Medallion:
+Khởi tạo cấu trúc các schema trên PostgreSQL:
 ```bash
 psql -U postgres -d vietdist_db -f init_db.sql
 ```
 
-#### 4. Thực thi Toàn bộ Luồng Data Pipeline
-Chạy trình điều phối tập trung thực hiện tự động toàn bộ luồng Bronze ➔ Silver ➔ Gold:
+#### Bước 3: Chạy Toàn Bộ Pipeline Tự Động
 ```bash
 python main.py
 ```
 
-*Toàn bộ pipeline chạy hoàn tất trong khoảng **~48.8 giây**, tự động ghi nhận logs và in ra kết quả kiểm toán.*
+#### 🖥️ Kết Quả Nhật Ký Chạy Thực Tế (Terminal Output Preview):
+```text
+🚀 Bắt đầu chạy pipeline VietDist — batch_id: 8fcb2aa1-4e61-9d44-f49508f1775a
+
+=============== STAGE 1: BRONZE (GOOGLE DRIVE INGESTION) ===============
+  → [Google Drive API] Nạp sales_transactions.csv (119,101 rows) ... OK [28.50s]
+  → [Google Drive API] Nạp sales_target_plan.xlsx (1,955 rows) ... OK [2.10s]
+  → [Google Drive API] Nạp customer_master.csv (2,000 rows) ... OK [1.20s]
+  ...
+✅ STAGE 1: BRONZE thành công (44.40s)
+
+=============== STAGE 2: SILVER (CLEANSING & DEDUP) ===============
+  → silver/silver_customers.sql ... OK
+  → silver/silver_sales_transactions.sql (Khử trùng lặp khóa phức hợp) ... OK
+  ...
+✅ STAGE 2: SILVER thành công (3.55s)
+
+=============== STAGE 3: GOLD (KIMBALL STAR SCHEMA & MARTS) ===============
+  → gold/dim_date.sql ... OK
+  → gold/dim_employees.sql (SCD Type 2 Timeline) ... OK
+  → gold/fact_sales.sql (Point-in-Time Join) ... OK
+  → gold/mart_sales_vs_target.sql (Multi-version KPI Mart) ... OK
+  → gold/mart_distributor_performance.sql (SLA Logistics Mart) ... OK
+✅ STAGE 3: GOLD thành công (0.85s)
+
+🎉 Pipeline hoàn tất thành công trong 48.80s! batch_id: 8fcb2aa1-4e61-9d44-f49508f1775a
+```
+
+[⬆ Quay lại đầu trang](#top)
 
 ---
 
-## 7. 👤 Thông Tin Tác Giả & Liên Hệ
+<a id="author"></a>
+## 👤 10. Thông Tin Tác Giả & Liên Hệ
 
 * **Tác giả:** **Nguyễn Xuân Thu**
 * **Vị trí:** Data Analyst / Analytics Engineer
