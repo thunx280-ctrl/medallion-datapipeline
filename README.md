@@ -25,7 +25,7 @@
 > 📌 **Project Scope:** This project implements an enterprise-grade **Data Engineering & Analytics Engineering** pipeline for **VietDist Corporation**, a national Fast-Moving Consumer Goods (FMCG) distributor.
 > The automated pipeline encompasses:
 > 1. **Cloud Ingestion:** Integrates with the **Google Drive API v3** via a **GCP Service Account**, streaming 10 source files (**164,901 raw records**, 25.2 MB) directly into an **In-Memory buffer (`io.BytesIO`)** with zero temporary disk footprint.
-> 2. **Medallion Lakehouse (PostgreSQL):** Cleanses, standardizes, and normalizes data across 3 tiers (Bronze $\rightarrow$ Silver $\rightarrow$ Gold), resolving order line duplicates and preserving historical territory transfers using **SCD Type 2 (Point-in-Time Join)**.
+> 2. **Medallion Lakehouse (PostgreSQL):** Cleanses, standardizes, and normalizes data across 3 tiers (Bronze → Silver → Gold), resolving order line duplicates and preserving historical territory transfers using **SCD Type 2 (Point-in-Time Join)**.
 > 3. **Curated Business Data Marts:** Publishes pre-aggregated data marts (`mart_sales_vs_target` and `mart_distributor_performance`) optimized for instant, sub-second query performance in downstream BI tools (Power BI / Metabase).
 
 ---
@@ -311,8 +311,8 @@ WHERE rn = 1;
 > **Engineering Highlight: Point-in-Time (AS-OF) Join with SCD Type 2 (`dim_employees`)**
 > 
 > Consider Sales Rep `EMP042` who transferred from Northern to Southern Vietnam on `2024-06-01`:
-> * An order placed on `2024-03-10` automatically resolves to `effective_date = 2024-01-01` $\rightarrow$ Correctly crediting revenue to **Northern Vietnam**.
-> * An order placed on `2024-08-20` automatically resolves to `effective_date = 2024-06-01` $\rightarrow$ Correctly crediting revenue to **Southern Vietnam**.
+> * An order placed on `2024-03-10` automatically resolves to `effective_date = 2024-01-01` → Correctly crediting revenue to **Northern Vietnam**.
+> * An order placed on `2024-08-20` automatically resolves to `effective_date = 2024-06-01` → Correctly crediting revenue to **Southern Vietnam**.
 > * **If joined conventionally with `is_current = TRUE`**, all Q1 historical sales would be erroneously credited to the Southern territory!
 
 ```mermaid
@@ -542,7 +542,9 @@ flowchart TD
 * **Key Analytics Engineering Innovations:**
   1. **Multi-Version Target Window Ranking:** A single employee can have multiple targets per month across revision cycles (`v1_Original`, `v2_Review`, `v3_Q4Push`). The query applies `ROW_NUMBER() OVER (PARTITION BY employee_sk, year, month ORDER BY version_date DESC NULLS LAST, plan_version DESC)` to dynamically isolate the **most recent active plan**, while keeping audit history preserved in `fact_targets`.
   2. **Net Revenue Adjusted for Returns:** Reps might generate synthetic sales that are returned at month-end. The mart enforces true revenue reconciliation:
-     $$\text{Actual Revenue} = \text{Gross Actual Revenue (fact\_sales)} - \text{Total Return Amount (fact\_returns)}$$
+
+     $$\text{Actual Net Revenue} = \text{Gross Sales Revenue} - \text{Total Return Amount}$$
+
   3. **Full Outer Join Strategy:** Guarantees inclusion of reps who had targets but made zero sales (0% achievement), as well as new hires with early sales but no formal quota.
 
 #### 📋 Real Data Snapshot Extracted from `mart_sales_vs_target`:
@@ -634,10 +636,14 @@ LEFT JOIN schema_gold.dim_employees de
 * **Grain:** **1 record per `(distributor_sk, year, month)`**. Total: **1,480 analytical rows**.
 * **Key Derived Performance Formulas:**
   1. **Average Fill Rate (%):**
-     $$\text{Fill Rate} = \frac{\sum \text{qty\_delivered}}{\sum \text{qty\_ordered}} \times 100\%$$
+
+     $$\text{Fill Rate (\%)} = \left( \frac{\sum \text{Delivered Quantity}}{\sum \text{Ordered Quantity}} \right) \times 100\%$$
+
      Monitors stockout severity across retail distribution channels.
   2. **On-Time Delivery SLA Rate (%):**
-     $$\text{On-Time Delivery Rate} = \frac{\text{Orders Delivered On Time}}{\text{Total Orders Delivered}} \times 100\%$$
+
+     $$\text{On-Time Delivery Rate (\%)} = \left( \frac{\text{Orders Delivered On-Time}}{\text{Total Orders Delivered}} \right) \times 100\%$$
+
      Enforced via conditional aggregation: `COUNT(*) FILTER (WHERE UPPER(ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))`.
 
 #### 📋 Real Data Snapshot Extracted from `mart_distributor_performance`:
@@ -737,11 +743,11 @@ With the curated Gold Data Marts in place, operational and commercial bottleneck
 ```
 
 ### 1. Significant Quota Deficit — `mart_sales_vs_target`
-* **Target vs Actual Revenue:** Quota was set at **290.74B VND**, while actual net sales reached **157.65B VND** $\rightarrow$ **Company-wide attainment stood at 51.19%** (a shortfall of **133.09B VND**).
-* **Team Disparity:** Only **14 of 111 Sales Reps (12.6%)** achieved $>80\%$ of their assigned quotas. Root cause analysis reveals initial planning (`Plan_v1`) set aggressive targets (+65% YoY) that failed to account for macro market softening.
+* **Target vs Actual Revenue:** Quota was set at **290.74B VND**, while actual net sales reached **157.65B VND** → **Company-wide attainment stood at 51.19%** (a shortfall of **133.09B VND**).
+* **Team Disparity:** Only **14 of 111 Sales Reps (12.6%)** achieved >80% of their assigned quotas. Root cause analysis reveals initial planning (`Plan_v1`) set aggressive targets (+65% YoY) that failed to account for macro market softening.
 
 ### 2. Supply Chain Fulfillment Bottlenecks — `mart_distributor_performance`
-* **Fill Rate:** Averaged **84.63%** (9.42M units ordered vs 7.99M delivered $\rightarrow$ **1.43M unit supply deficit**).
+* **Fill Rate:** Averaged **84.63%** (9.42M units ordered vs 7.99M delivered → **1.43M unit supply deficit**).
 * **On-Time SLA:** Only **40.36% of orders met delivery SLAs**, with an average delay of **2.8 days**, driving stockouts at retail points and forfeiting sales to competing brands.
 
 ### 3. Return Concentration — `fact_returns`

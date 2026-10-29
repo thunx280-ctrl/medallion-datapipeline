@@ -341,11 +341,11 @@ Curated aggregated models pre-joined and optimized to deliver sub-second perform
 
 | Metric Name | Business Definition | Mathematical Formula | Target SLA / Benchmark |
 | :--- | :--- | :--- | :---: |
-| **Target Achievement Rate %** | Degree to which a sales rep fulfills assigned revenue quotas. | $$\frac{\sum \text{actual\_revenue}}{\sum \text{target\_revenue}} \times 100$$ | $\ge 100\%$ |
-| **Revenue Variance** | Absolute monetary difference between actual sales and quota. | $$\text{actual\_revenue} - \text{target\_revenue}$$ | $\ge 0 \text{ VND}$ |
-| **Fill Rate %** | Measure of inventory availability and logistics fulfillment capacity. | $$\frac{\sum \text{qty\_delivered}}{\sum \text{qty\_ordered}} \times 100$$ | $\ge 95\%$ |
-| **On-Time Delivery Rate %** | Percentage of shipments reaching destination within SLA promise. | $$\frac{\text{Count of On-Time Orders}}{\text{Total Orders}} \times 100$$ | $\ge 90\%$ |
-| **Product Return Rate %** | Proportion of sold value returned due to defects or cancellations. | $$\frac{\sum \text{return\_net\_amount}}{\sum \text{sales\_gross\_amount}} \times 100$$ | $\le 3\%$ |
+| **Target Achievement Rate %** | Degree to which a sales rep fulfills assigned revenue quotas. | `(∑ actual_revenue / ∑ target_revenue) × 100` | ≥ 100% |
+| **Revenue Variance** | Absolute monetary difference between actual sales and quota. | `actual_revenue - target_revenue` | ≥ 0 VND |
+| **Fill Rate %** | Measure of inventory availability and logistics fulfillment capacity. | `(∑ qty_delivered / ∑ qty_ordered) × 100` | ≥ 95% |
+| **On-Time Delivery Rate %** | Percentage of shipments reaching destination within SLA promise. | `(Count of On-Time Orders / Total Orders) × 100` | ≥ 90% |
+| **Product Return Rate %** | Proportion of sold value returned due to defects or cancellations. | `(∑ return_net_amount / ∑ sales_gross_amount) × 100` | ≤ 3% |
 
 ---
 
