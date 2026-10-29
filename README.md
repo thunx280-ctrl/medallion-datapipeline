@@ -1,5 +1,5 @@
 # 🏛️ VietDist Corporation — Enterprise End-to-End Data Pipeline
-### *Medallion Lakehouse Architecture: Automated Ingestion from Google Drive API to Normalized Kimball Star Schema on PostgreSQL*
+### *Medallion Architecture: Automated Ingestion from Google Drive API to Normalized Kimball Star Schema on PostgreSQL*
 
 [**🎯 Business Problem**](#part-1) • 
 [**🏗️ Architecture**](#part-2) • 
