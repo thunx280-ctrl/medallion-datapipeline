@@ -543,7 +543,7 @@ flowchart TD
   1. **Multi-Version Target Window Ranking:** A single employee can have multiple targets per month across revision cycles (`v1_Original`, `v2_Review`, `v3_Q4Push`). The query applies `ROW_NUMBER() OVER (PARTITION BY employee_sk, year, month ORDER BY version_date DESC NULLS LAST, plan_version DESC)` to dynamically isolate the **most recent active plan**, while keeping audit history preserved in `fact_targets`.
   2. **Net Revenue Adjusted for Returns:** Reps might generate synthetic sales that are returned at month-end. The mart enforces true revenue reconciliation:
 
-     $$\text{Actual Net Revenue} = \text{Gross Sales Revenue} - \text{Total Return Amount}$$
+$$\text{Actual Net Revenue} = \text{Gross Sales Revenue} - \text{Total Return Amount}$$
 
   3. **Full Outer Join Strategy:** Guarantees inclusion of reps who had targets but made zero sales (0% achievement), as well as new hires with early sales but no formal quota.
 
@@ -637,12 +637,12 @@ LEFT JOIN schema_gold.dim_employees de
 * **Key Derived Performance Formulas:**
   1. **Average Fill Rate (%):**
 
-     $$\text{Fill Rate (\%)} = \left( \frac{\sum \text{Delivered Quantity}}{\sum \text{Ordered Quantity}} \right) \times 100\%$$
+$$\text{Fill Rate (\%)} = \left( \frac{\sum \text{Delivered Quantity}}{\sum \text{Ordered Quantity}} \right) \times 100\%$$
 
      Monitors stockout severity across retail distribution channels.
   2. **On-Time Delivery SLA Rate (%):**
 
-     $$\text{On-Time Delivery Rate (\%)} = \left( \frac{\text{Orders Delivered On-Time}}{\text{Total Orders Delivered}} \right) \times 100\%$$
+$$\text{On-Time Delivery Rate (\%)} = \left( \frac{\text{Orders Delivered On-Time}}{\text{Total Orders Delivered}} \right) \times 100\%$$
 
      Enforced via conditional aggregation: `COUNT(*) FILTER (WHERE UPPER(ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))`.
 
