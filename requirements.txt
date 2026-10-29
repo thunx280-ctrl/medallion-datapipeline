@@ -1,7 +1,10 @@
-pandas
-sqlalchemy
-openpyxl
-psycopg2-binary
-python-dotenv
-google-api-python-client
-google-auth
+# Core Data Processing & Database Drivers
+pandas>=2.0.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+openpyxl>=3.1.0
+python-dotenv>=1.0.0
+
+# Google Cloud Platform & Drive API Integration
+google-api-python-client>=2.100.0
+google-auth>=2.23.0

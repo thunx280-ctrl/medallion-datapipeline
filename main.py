@@ -44,7 +44,7 @@ SILVER_FILES = [
     "silver/silver_distributors.sql",
     "silver/silver_distributor_orders.sql",
     "silver/silver_employees.sql",
-    "silver/silver_territoty.sql",
+    "silver/silver_territory.sql",
     "silver/silver_return_transactions.sql",
     "silver/silver_promotion_program.sql",
     "silver/silver_sales_transactions.sql",

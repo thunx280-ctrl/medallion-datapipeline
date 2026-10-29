@@ -1,5 +1,3 @@
-
-
 # 🏛️ VietDist Corporation — Enterprise End-to-End Data Pipeline
 ### *Medallion Lakehouse Architecture: Automated Ingestion from Google Drive API to Normalized Kimball Star Schema on PostgreSQL*
 
@@ -9,6 +7,7 @@
 [![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze_→_Silver_→_Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
 [![Data Modeling](https://img.shields.io/badge/Data_Modeling-Kimball_Star_Schema-blue?style=for-the-badge)](https://www.kimballgroup.com/)
 [![SCD Type 2](https://img.shields.io/badge/SCD_Type_2-Historical_Integrity-orange?style=for-the-badge)]()
+[![Data Dictionary](https://img.shields.io/badge/Documentation-Data_Dictionary-0284c7?style=for-the-badge&logo=gitbook&logoColor=white)](DATA_DICTIONARY.md)
 [![Status](https://img.shields.io/badge/Pipeline_Status-Production_Ready-success?style=for-the-badge)]()
 
 [**🎯 Business Problem**](#part-1) • 
@@ -58,7 +57,7 @@ flowchart LR
 | **Sales Rep Territory Transfers (Historical Distortion):** Reps reassigned across regions mid-year distorted historical sales reports when overwritten. | **Historical Preservation with SCD Type 2:** Managed via `effective_date` and `expiry_date`, applying **Point-in-Time (AS-OF) Joins** to transaction timestamps. | **100% historical attribution accuracy** for fair sales rep incentive and KPI auditing. |
 | **Multi-Version KPI Targets:** Annual revenue quotas revised 3 times (`v1`, `v2`, `v3`) across disconnected Excel sheets caused reconciliation friction. | **Automated Unpivoting & Window Ranking:** Ingested 1,955 target rows across multi-sheet workbooks, dynamically picking the latest active revision. | **Automated reconciliation of 1,332 KPI records**, uncovering an overall quota achievement of **51.19%**. |
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -120,7 +119,7 @@ flowchart LR
     style Gold fill:#854d0e,stroke:#eab308,color:#ffffff,stroke-width:2px
 ```
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -204,7 +203,7 @@ def read_data(file_name, buffer, sheet_name=0):
 ```
 </details>
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -410,7 +409,7 @@ def main():
 ```
 </details>
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -418,6 +417,8 @@ def main():
 ## 📐 5. Gold Layer Kimball Star Schema Modeling
 
 The curated Gold tier adheres to **Kimball Dimensional Modeling**, cleanly separating transactional fact events from shared conformed dimensions:
+
+> 📖 **Data Catalog & Technical Reference:** For granular physical column definitions, nullability constraints, and source-to-target lineage mapping across all 20+ tables, refer to the [Enterprise Data Dictionary](DATA_DICTIONARY.md).
 
 ```mermaid
 erDiagram
@@ -493,7 +494,7 @@ erDiagram
     }
 ```
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -687,7 +688,7 @@ GROUP BY dd.distributor_sk, dd.distributor_id, dd.distributor_name, dd.tier, dd.
 ```
 </details>
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -716,7 +717,7 @@ To ensure data reliability before downstream reporting, the pipeline enforces **
 | **Single Source of Truth** | High risk of calculation discrepancies as individual departments write conflicting DAX formulas. | **100% organizational consistency** guaranteed by central warehouse logic. |
 | **Client Memory Overhead** | Consumes heavy client RAM, causing frequent Power BI Desktop freezes. | **Compute offloaded to Database**, supporting high-concurrency DirectQuery and Scheduled Import. |
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -746,7 +747,7 @@ With the curated Gold Data Marts in place, operational and commercial bottleneck
 ### 3. Return Concentration — `fact_returns`
 * Returned merchandise totaled **1.31B VND** across 3,665 return events. Food & Beverage products accounted for **68.4% of total returns** due to stringent expiration date thresholds enforced by modern retail chains.
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
@@ -757,6 +758,7 @@ With the curated Gold Data Marts in place, operational and commercial bottleneck
 ```
 medallion-datapipeline/
 ├── config/                      # GCP Service Account credentials (.json)
+│   └── .gitkeep                 # Directory placeholder for cloned environments
 ├── gold/                        # 10 Gold Tier DDL & DML Scripts (Star Schema & Marts)
 │   ├── dim_customers.sql        # Customer dimension
 │   ├── dim_date.sql             # 366-day calendar dimension
@@ -776,12 +778,14 @@ medallion-datapipeline/
 ├── silver/                      # 10 Silver Cleansing SQL Scripts
 │   ├── silver_sales_transactions.sql # Composite key deduplication
 │   ├── silver_customers.sql     # Tax code imputation and string cleaning
+│   ├── silver_territory.sql     # Territory mapping staging
 │   └── ...                      # Remaining silver scripts
 ├── utils/                       # Shared Database & Google Drive API v3 Utilities
 │   ├── db_utils.py              # Service Account auth, BytesIO streaming, DB engine
 │   └── file_parser.py           # Stream decoding, BOM stripping (UTF-8-SIG)
 ├── VietDist_SampleData/         # Local backup sample datasets (CSV & XLSX)
 ├── .env.example                 # Environment variable template & Drive File IDs
+├── DATA_DICTIONARY.md           # Enterprise Technical Data Catalog (360+ lines)
 ├── init_db.sql                  # Database schema initialization script
 ├── main.py                      # Centralized Fail-Fast Pipeline Orchestrator
 ├── Profiling_Report.xlsx        # Automated data quality profiling report
@@ -871,7 +875,7 @@ python main.py
 🎉 Pipeline completed successfully in 48.80s! batch_id: 8fcb2aa1-4e61-9d44-f49508f1775a
 ```
 
-[⬆ Back to Top](#top)
+[⬆ Back to Top](#)
 
 ---
 
