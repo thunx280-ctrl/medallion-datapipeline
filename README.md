@@ -1,15 +1,6 @@
 # 🏛️ VietDist Corporation — Enterprise End-to-End Data Pipeline
 ### *Medallion Lakehouse Architecture: Automated Ingestion from Google Drive API to Normalized Kimball Star Schema on PostgreSQL*
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![Google Drive API](https://img.shields.io/badge/Google_Drive_API-v3_Cloud_Ingestion-34A853?style=for-the-badge&logo=googledrive&logoColor=white)](https://developers.google.com/drive)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze_→_Silver_→_Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
-[![Data Modeling](https://img.shields.io/badge/Data_Modeling-Kimball_Star_Schema-blue?style=for-the-badge)](https://www.kimballgroup.com/)
-[![SCD Type 2](https://img.shields.io/badge/SCD_Type_2-Historical_Integrity-orange?style=for-the-badge)]()
-[![Data Dictionary](https://img.shields.io/badge/Documentation-Data_Dictionary-0284c7?style=for-the-badge&logo=gitbook&logoColor=white)](DATA_DICTIONARY.md)
-[![Status](https://img.shields.io/badge/Pipeline_Status-Production_Ready-success?style=for-the-badge)]()
-
 [**🎯 Business Problem**](#part-1) • 
 [**🏗️ Architecture**](#part-2) • 
 [**☁️ Cloud Ingestion**](#part-3) • 
@@ -18,7 +9,6 @@
 [**🛒 Data Marts**](#part-6) • 
 [**🛡️ Data Quality**](#part-7) • 
 [**📊 Business Insights**](#part-8) • 
-[**🚀 Quickstart**](#part-9)
 
 ---
 
