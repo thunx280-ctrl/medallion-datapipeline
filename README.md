@@ -1,223 +1,234 @@
-# 🏛️ VietDist Corporation — Enterprise End-to-End Data Pipeline
-### *Medallion Architecture: Automated Ingestion from Google Drive API to Normalized Kimball Star Schema on PostgreSQL*
+# 🏛️ VietDist Corporation — Sales & Distribution Data Pipeline
+### *End-to-End Medallion Architecture (Bronze → Silver → Gold) in Python & PostgreSQL with Power BI Reporting*
 
-[**🎯 Business Problem**](#part-1) • 
-[**🏗️ Architecture**](#part-2) • 
-[**☁️ Cloud Ingestion**](#part-3) • 
-[**🔄 3-Tier Pipeline**](#part-4) • 
-[**📐 Star Schema**](#part-5) • 
-[**🛒 Data Marts**](#part-6) • 
-[**🛡️ Data Quality**](#part-7) • 
-[**📊 Business Insights**](#part-8) • 
-
----
-
-> 📌 **Project Scope:** This project implements an enterprise-grade **Data Engineering & Analytics Engineering** pipeline for **VietDist Corporation**, a national Fast-Moving Consumer Goods (FMCG) distributor.
-> The automated pipeline encompasses:
-> 1. **Cloud Ingestion:** Integrates with the **Google Drive API v3** via a **GCP Service Account**, streaming 10 source files (**164,901 raw records**, 25.2 MB) directly into an **In-Memory buffer (`io.BytesIO`)** with zero temporary disk footprint.
-> 2. **Medallion Lakehouse (PostgreSQL):** Cleanses, standardizes, and normalizes data across 3 tiers (Bronze → Silver → Gold), resolving order line duplicates and preserving historical territory transfers using **SCD Type 2 (Point-in-Time Join)**.
-> 3. **Curated Business Data Marts:** Publishes pre-aggregated data marts (`mart_sales_vs_target` and `mart_distributor_performance`) optimized for instant, sub-second query performance in downstream BI tools (Power BI / Metabase).
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Google Drive API](https://img.shields.io/badge/Google_Drive_API-v3_Cloud_Ingestion-34A853?style=for-the-badge&logo=googledrive&logoColor=white)](https://developers.google.com/drive)
+[![Architecture](https://img.shields.io/badge/Architecture-Medallion_(Bronze_→_Silver_→_Gold)-F2C811?style=for-the-badge&logo=databricks&logoColor=black)]()
+[![Data Modeling](https://img.shields.io/badge/Data_Modeling-Kimball_Star_Schema-blue?style=for-the-badge)](https://www.kimballgroup.com/)
+[![SCD Type 2](https://img.shields.io/badge/SCD_Type_2-Historical_Integrity-orange?style=for-the-badge)]()
+[![Power BI](https://img.shields.io/badge/Power_BI-Desktop_Reporting-F2C811?style=for-the-badge&logo=powerbi&logoColor=black)](https://powerbi.microsoft.com/)
+[![Documentation](https://img.shields.io/badge/Data_Dictionary-Comprehensive-0284c7?style=for-the-badge&logo=gitbook&logoColor=white)](DATA_DICTIONARY.md)
 
 ---
 
-<a id="part-1"></a>
-## 🎯 1. Business Context & Problem Statement
-
-### 1.1 FMCG Distribution Model
-**VietDist Corporation** distributes goods nationwide through two synchronized commercial channels:
-* **Direct Field Sales Force:** 111 Sales Representatives managing key supermarket chains, modern trade accounts, and convenience stores across Northern, Central, and Southern Vietnam.
-* **Indirect Wholesale Network:** 138 Exclusive Regional Distributors managing local warehouses and placing bulk wholesale orders.
-
-### 1.2 Data Challenges vs Data Warehouse Solutions
-
-| Source Data Challenge (Before Pipeline ❌) | Data Warehouse Solution (After Pipeline ✅) | Empirical Verification Metric |
-| :--- | :--- | :---: |
-| **Manual Cloud Sync & Disk Overhead:** Manually downloading files from Google Drive introduces version drift and wasteful local disk I/O. | **Automated Google Drive API v3:** Ingests via **GCP Service Account** using `MediaIoBaseDownload` directly into an in-memory stream (`io.BytesIO`). | **100% automated cloud ingestion**, zero local disk storage, 10 sources loaded in **44.4s**. |
-| **Order Line Duplication (Network Retries):** A 20.6 MB transactions file contained redundant rows due to network retries during order submissions. | **Composite Key Deduplication:** Applied Window Function `ROW_NUMBER() OVER (PARTITION BY order_id, product_id ORDER BY _ingested_at DESC)`. | **0 duplicate rows**, perfectly preserving 119,101 line items across 50,000 distinct orders. |
-| **Dirty Formats & Missing Attributes:** Inconsistent date formats (`YYYY-MM-DD` vs `DD/MM/YYYY`), stray whitespaces, and 51.75% missing tax codes. | **Schema Enforcement & Defensive Casting:** Strict casting to `DATE`, `NUMERIC(15,2)`, text normalization (`TRIM/UPPER`), and null handling. | **100% schema conformance**, preventing downstream calculation failures. |
-| **Sales Rep Territory Transfers (Historical Distortion):** Reps reassigned across regions mid-year distorted historical sales reports when overwritten. | **Historical Preservation with SCD Type 2:** Managed via `effective_date` and `expiry_date`, applying **Point-in-Time (AS-OF) Joins** to transaction timestamps. | **100% historical attribution accuracy** for fair sales rep incentive and KPI auditing. |
-| **Multi-Version KPI Targets:** Annual revenue quotas revised 3 times (`v1`, `v2`, `v3`) across disconnected Excel sheets caused reconciliation friction. | **Automated Unpivoting & Window Ranking:** Ingested 1,955 target rows across multi-sheet workbooks, dynamically picking the latest active revision. | **Automated reconciliation of 1,332 KPI records**, uncovering an overall quota achievement of **51.19%**. |
+## 📌 Table of Contents
+1. [Project Overview & Business Context](#1-project-overview--business-context)
+2. [System Architecture & Workflow](#2-system-architecture--workflow)
+3. [Implementation Tasks by Phase](#3-implementation-tasks-by-phase)
+   - [Phase 0: Environment & Database Setup](#phase-0-environment--database-setup)
+   - [Phase 1: Bronze Layer — Ingestion & Raw Storage](#phase-1-bronze-layer--ingestion--raw-storage)
+   - [Phase 2: Silver Layer — Data Cleansing & Validation](#phase-2-silver-layer--data-cleansing--validation)
+   - [Phase 3: Gold Layer — Dimensional Modeling & Data Marts](#phase-3-gold-layer--dimensional-modeling--data-marts)
+   - [Phase 4: Serving & Business Intelligence (Power BI)](#phase-4-serving--business-intelligence-power-bi)
+4. [📖 Data Dictionary — Comprehensive Table Overview](#4--data-dictionary--comprehensive-table-overview)
+5. [📁 Repository Structure & How to Run](#5-repository-structure--how-to-run)
+6. [👤 Author & Contact](#6-author--contact)
 
 ---
 
-<a id="part-2"></a>
-## 🏗️ 2. System Architecture
+## 🏢 1. Project Overview & Business Context
 
-The pipeline follows a **Decoupled Medallion Architecture**, isolating raw ingestion from staging transformations and curated data marts. This design guarantees **Fault Isolation**, **Data Lineage**, and **Idempotency** (rerunning any stage without duplicating records or corrupting state):
+### 1.1 Project Overview
+* **Role:** **Intern / Junior Analytics Engineer**
+* **Project Reference:** VietDist Analytics Project Specification (v2.0)
+* **Core Objective:** Design and implement an automated local ELT data pipeline using **Python** and **PostgreSQL** following the **Medallion Architecture (Bronze → Silver → Gold)**. The pipeline ingests raw files from Google Drive, performs automated profiling and cleansing, structures a Kimball Star Schema with **SCD Type 2**, materializes curated **Data Marts**, and serves clean models to **Power BI Desktop**.
+
+### 1.2 Business Context
+**VietDist Corporation** is a nationwide Fast-Moving Consumer Goods (FMCG) distribution enterprise operating across Northern, Central, and Southern Vietnam. The company distributes food, beverage, and personal care products through two synchronized commercial channels:
+* **Direct Field Sales Force:** 111 sales representatives servicing supermarkets, convenience stores, and modern trade accounts.
+* **Indirect Wholesale Network:** 138 regional wholesale distributors managing local warehouses and logistics fulfillment.
+
+### 1.3 The Business Problem
+Management faced critical operational challenges due to fragmented data sources:
+* **Decentralized Raw Files:** 10 core business datasets were stored on Google Drive across mixed file formats (`.csv`, `.xlsx`, `.xlsm`, `.xlsb`).
+* **Data Quality Friction:** Raw transaction files contained duplicate order lines, mixed date formats (`YYYY-MM-DD` vs `DD/MM/YYYY`), untrimmed whitespaces, and missing attributes (e.g., 51.75% missing customer tax codes).
+* **Organizational Changes (SCD):** Sales representatives transferred territories mid-year. Overwriting their profiles caused historical sales to be miscredited to new regions.
+* **Multi-Version Quotas:** Sales targets were revised across multiple cycles (`v1_Original`, `v2_MidYearReview`) across separate Excel sheets, creating reporting conflicts.
+* **Reporting Overhead:** Direct ingestion into Power Query was slow, unstable, and required complex DAX formulas to reconcile net revenue and track delivery SLAs.
+
+
+---
+
+## 🏗️ 2. System Architecture & Workflow
+
+The pipeline separates data ingestion, cleansing, and business modeling into three distinct PostgreSQL schemas, ensuring data lineage, fault isolation, and reproducibility:
 
 ```mermaid
 flowchart LR
-    subgraph Cloud ["☁️ CLOUD STORAGE & AUTHENTICATION"]
-        direction TB
-        GD[("📁 Google Drive Shared Folders<br/><i>(10 Source Files · CSV & XLSX · 25.2 MB)</i>")]
-        SA["🔑 Google Cloud Service Account<br/><i>(OAuth 2.0 · Scopes: drive.readonly)</i>"]
-        GD -.->|Authenticate| SA
-    end
+    A["📁 Google Drive<br/>(10 Source Files)"] -->|Google Drive API v3<br/>Service Account| B["🐍 Python Loaders<br/>(file_parser.py)"]
+    B -->|All TEXT + Metadata<br/>Append Mode| C[("🥉 Bronze Layer<br/>(schema_bronze)")]
+    C -->|SQL Staging Scripts<br/>Type Cast & Dedup| D[("🥈 Silver Layer<br/>(schema_silver)")]
+    D -->|Kimball Star Schema<br/>SCD Type 2 & Marts| E[("🥇 Gold Layer<br/>(schema_gold)")]
+    E -->|Direct Query / Import| F["📊 Power BI Desktop<br/>(VietDist_Corporation.pbix)"]
 
-    subgraph Memory ["⚡ IN-MEMORY STREAMING (Python)"]
-        direction TB
-        BIO["BytesIO Stream Buffer<br/><i>(MediaIoBaseDownload)</i>"]
-        FP["File Parser<br/><i>(UTF-8-SIG · BOM Stripping · Multi-sheet)</i>"]
-        BIO --> FP
-    end
-
-    subgraph DW ["🐘 POSTGRESQL ENTERPRISE DATA WAREHOUSE"]
-        direction TB
-        
-        subgraph Bronze ["🥉 BRONZE (schema_bronze)"]
-            B1[("Raw Ingestion Tables<br/><i>(Append-Only · Raw TEXT Grain)</i>")]
-            B2[("ingest_log<br/><i>(UUID Batch Telemetry)</i>")]
-        end
-
-        subgraph Silver ["🥈 SILVER (schema_silver)"]
-            SV1[("Cleaned & Standardized Tables<br/><i>(Deduplicated · ISO Dates · Quality Gates)</i>")]
-        end
-
-        subgraph Gold ["🥇 GOLD (schema_gold)"]
-            G_DIM[("Conformed Dimensions<br/><i>dim_customers, dim_products,<br/>dim_employees (SCD2), dim_date</i>")]
-            G_FACT[("Fact Tables<br/><i>fact_sales (AS-OF Join),<br/>fact_targets, fact_returns, fact_orders</i>")]
-            G_MART[("Curated Data Marts<br/><i>mart_sales_vs_target,<br/>mart_distributor_performance</i>")]
-        end
-    end
-
-    subgraph Downstream ["📊 DOWNSTREAM CONSUMPTION"]
-        BI1["💻 Ad-hoc SQL Analytics"]
-        BI2["📈 Power BI / BI Dashboards<br/><i>(Pre-aggregated Data Marts)</i>"]
-    end
-
-    Cloud ==>|Google Drive API v3<br/>Stream Binary Chunks| Memory
-    Memory ==>|Chunked to_sql| Bronze
-    Bronze ==>|SQL Transformations<br/>Cast, Trim & Dedup| Silver
-    Silver ==>|Kimball Modeling<br/>Surrogate Keys & SCD2| Gold
-    Gold --> Downstream
-
-    style Cloud fill:#1e3a8a,stroke:#3b82f6,color:#ffffff,stroke-width:2px
-    style Memory fill:#134e4a,stroke:#14b8a6,color:#ffffff,stroke-width:2px
-    style Bronze fill:#8B5A2B,stroke:#CD7F32,color:#ffffff,stroke-width:2px
-    style Silver fill:#475569,stroke:#94a3b8,color:#ffffff,stroke-width:2px
-    style Gold fill:#854d0e,stroke:#eab308,color:#ffffff,stroke-width:2px
+    style A fill:#1e3a8a,stroke:#3b82f6,color:#fff
+    style B fill:#0f766e,stroke:#14b8a6,color:#fff
+    style C fill:#78350f,stroke:#b45309,color:#fff
+    style D fill:#334155,stroke:#64748b,color:#fff
+    style E fill:#854d0e,stroke:#eab308,color:#fff
+    style F fill:#ca8a04,stroke:#eab308,color:#fff
 ```
+
+| Layer | Schema | Role & Processing Logic | Technologies |
+| :--- | :--- | :--- | :--- |
+| **Bronze** | `schema_bronze` | Ingests exact raw data from source files. All columns stored as `TEXT` to prevent schema drift. Adds 4 operational audit metadata columns. | Python, Google Drive API, SQLAlchemy |
+| **Silver** | `schema_silver` | Data profiling, type casting (`DATE`, `NUMERIC`, `INTEGER`), text cleaning (`TRIM`, `UPPER`), null handling, and composite key deduplication. | PostgreSQL, SQL Staging Scripts |
+| **Gold** | `schema_gold` | Analytical Star Schema with conformed dimensions, **SCD Type 2** historical tracking, fact tables, and 2 pre-aggregated Data Marts. | PostgreSQL, Kimball Modeling |
+| **Serving** | BI Layer | Interactive reporting for sales quota attainment and distributor supply chain fulfillment. | Power BI Desktop |
 
 ---
 
-<a id="part-3"></a>
-## ☁️ 3. Cloud Ingestion via Google Drive API v3
+## 🔄 3. Implementation Tasks by Phase
 
-### 3.1 Architecture & RAM Optimization
-1. **Decentralized Authentication (GCP Service Account):** Authenticates using a service account credentials JSON file (`GOOGLE_SERVICE_ACCOUNT_KEY`) configured via `.env`, adhering to the principle of least privilege (`https://www.googleapis.com/auth/drive.readonly`).
-2. **In-Memory Streaming (Zero Local Disk Storage):** Instead of downloading raw files to disk and reading them back (which increases disk wear and leaves temp files), the pipeline uses `googleapiclient.http.MediaIoBaseDownload` to stream binary chunks directly into an **`io.BytesIO()`** buffer.
-3. **Resilient Parsing Engine (`file_parser.py`):**
-   * Automatically strips Byte Order Marks (`\ufeff`) in UTF-8 CSV files using `encoding='utf-8-sig'`.
-   * Seamlessly unpivots multi-sheet workbooks for quota planning (`SRC02_sales_target_plan.xlsx` with `sheet_name=None`) to load all version sheets (`v1`, `v2`, `v3`) in a single pass.
-4. **Data Fidelity (`dtype=str` & `keep_default_na=False`):** Prevents Pandas from silently stripping leading zeroes (e.g., transforming `'00123'` to `123`) or converting empty fields into literal `"nan"` strings.
-
-<details>
-<summary><b>🔍 View Python Google Drive In-Memory Streaming Code (Click to Expand)</b></summary>
-
-```python
-# Extracted from utils/db_utils.py: Google Drive API Connection & In-Memory Streaming
-import os
-from io import BytesIO
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-
-SERVICE_ACCOUNT_FILE = os.getenv('GOOGLE_SERVICE_ACCOUNT_KEY')
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
-
-def get_service_account():
-    """Initializes Google Drive v3 client using Service Account credentials."""
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE,
-        scopes=SCOPES
-    )
-    return build("drive", "v3", credentials=credentials)
-
-def download_data(service, file_id):
-    """
-    Streams file content directly into an in-memory BytesIO buffer.
-    Leaves zero temporary files on the local filesystem.
-    """
-    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
-    buffer = BytesIO()
-    downloader = MediaIoBaseDownload(buffer, request)
-    done = False
-    while not done:
-        status, done = downloader.next_chunk()
-    buffer.seek(0)
-    return buffer
-```
-</details>
-
-<details>
-<summary><b>🔍 View Python Safe File Parsing & BOM Stripping Code (Click to Expand)</b></summary>
-
-```python
-# Extracted from utils/file_parser.py: Binary stream parsing with UTF-8-SIG
-import pandas as pd
-
-def read_data(file_name, buffer, sheet_name=0):
-    """
-    Parses BytesIO stream into DataFrame. Enforces string data types for Bronze
-    and strips UTF-8 BOM characters (\ufeff).
-    """
-    file_name_lower = file_name.lower()
-    if file_name_lower.endswith(".csv"):
-        return pd.read_csv(
-            buffer,
-            encoding="utf-8-sig",
-            dtype=str,
-            keep_default_na=False
-        )
-    elif file_name_lower.endswith((".xlsx", ".xlsm")):
-        return pd.read_excel(
-            buffer,
-            sheet_name=sheet_name,
-            engine="openpyxl",
-            dtype=str,
-            keep_default_na=False
-        )
-```
-</details>
-
-[⬆ Back to Top](#)
+### Phase 0: Environment & Database Setup
+* **Python Environment:** Initialized a virtual environment (`venv`) with core libraries: `pandas`, `openpyxl`, `pyxlsb`, `psycopg2-binary`, `sqlalchemy`, `google-api-python-client`, and `python-dotenv`.
+* **Database Initialization (`init_db.sql`):** Configured PostgreSQL 16 database `vietdist_dw` and created the three core schemas: `schema_bronze`, `schema_silver`, and `schema_gold`.
+* **Security & Configuration:** Configured database credentials and Google Service Account key paths in `.env`, ensuring `.env` and `config/` are excluded via `.gitignore`.
 
 ---
 
-<a id="part-4"></a>
-## 🔄 4. 3-Tier Medallion Data Transformation Lifecycle
+### Phase 1: Bronze Layer — Ingestion & Raw Storage
 
-### 🥉 Tier 1: Bronze Layer (Raw Streaming & Ingestion Audit)
 * **Objective:** Extract and load raw source data into `schema_bronze` with exact source fidelity, injecting metadata to ensure comprehensive data lineage.
-* **Audit Metadata Injection (`schema_bronze.ingest_log`):** Each ingested row receives four operational audit columns:
-  * `_source_file`: Original filename on Google Drive.
-  * `_source_platform`: Origin identifier (`'google_drive'`).
-  * `_ingested_at`: UTC timestamp of extraction.
-  * `_batch_id`: Global UUID identifying the unique pipeline run.
+* **Google Drive Connector (`utils/db_utils.py`):** Authenticates via GCP Service Account OAuth 2.0 (`drive.readonly`) and streams files into memory using `MediaIoBaseDownload` without saving temporary files to disk.
+* **Multi-Format Parsing (`utils/file_parser.py`):** Robust parser handling standard `.csv` (with UTF-8 BOM stripping via `utf-8-sig`), `.xlsx`, `.xlsm`, and binary `.xlsb` files (using `pyxlsb`).
+    
+    ```python
+    # utils/db_utils.py — Google Drive v3 Binary In-Memory Stream
+    def download_data(service, file_id):
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+        buffer = BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        buffer.seek(0)
+        return buffer
+    
+    # utils/file_parser.py — Multi-Format Parsing & BOM Stripping
+    def read_data(file_name, buffer, sheet_name=0):
+        file_name_lower = file_name.lower()
+        if file_name_lower.endswith(".csv"):
+            # utf-8-sig strips BOM (﻿); dtype=str preserves leading zeroes
+            return pd.read_csv(buffer, encoding="utf-8-sig", dtype=str, keep_default_na=False)
+        elif file_name_lower.endswith((".xlsx", ".xlsm")):
+            return pd.read_excel(buffer, sheet_name=sheet_name, engine="openpyxl", dtype=str, keep_default_na=False)
+        elif file_name_lower.endswith(".xlsb"):
+            return pd.read_excel(buffer, sheet_name=sheet_name, engine="pyxlsb", dtype=str, keep_default_na=False)
+    ```
 
-#### 📋 Bronze Ingestion Audit Telemetry (10 Sources):
-| Google Drive Source | Destination Table (`schema_bronze`) | Row Count | Source Format | Extraction Time | Source Platform | Ingestion Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| `FILE_ID_SALES_TRANSACTIONS` | `sales_transactions` | **119,101** | CSV (20.6 MB) | 28.5s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_SALES_TARGET` | `sales_targets_raw` | **1,955** | XLSX (3 Sheets) | 2.1s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_CUSTOMERS` | `customers` | **2,000** | CSV (375 KB) | 1.2s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_PRODUCTS` | `products` | **85** | XLSX (11 KB) | 0.8s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_DISTRIBUTOR_ORDERS` | `distributor_orders` | **8,000** | XLSX (3.5 MB) | 4.3s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_DISTRIBUTORS` | `distributors` | **138** | CSV (29 KB) | 0.9s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_EMPLOYEES` | `employees` | **150** | XLSX (34 KB) | 1.1s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_TERRITORY` | `territory` | **63** | XLSX (69 KB) | 0.7s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_RETURNS` | `returns` | **3,665** | CSV (487 KB) | 1.5s | `google_drive` | `SUCCESS` ✅ |
-| `FILE_ID_PROMOTION` | `promotions` | **10** | XLSX (9 KB) | 0.6s | `google_drive` | `SUCCESS` ✅ |
-| **Total (10 Sources)** | **schema_bronze** | **164,901 rows** | **~25.2 MB** | **44.4s** | **Google Drive API** | **100% Ingested** |
+* **Audit Metadata Injection:** Every table in Bronze receives 4 standard audit columns:
+  * `_source_file`: Original file name.
+  * `_source_platform`: Origin identifier (`'google_drive'`).
+  * `_ingested_at`: Timestamp of ingestion (`DEFAULT NOW()`).
+  * `_batch_id`: UUID tracking each pipeline run.
+* **Ingestion Logging (`schema_bronze.ingest_log`):** Records execution telemetry (`batch_id`, `source_name`, `rows_loaded`, `status`, `duration_sec`).
+* **Special Handling — Multi-Version Sales Targets (`loader/load_sales_target.py`):**
+  * Reads `SRC02_sales_target_plan.xlsx` across all sheets (`Plan_v1_Original`, `Plan_v2`) using `sheet_name=None`.
+  * Unpivots monthly target columns (`T1` to `T12`) into normalized rows.
+  * Filters out summary/total rows ('TỔNG' / 'TOTAL').
+  * Appends versioned rows into `schema_bronze.sales_targets_raw` without overwriting earlier plans, recording sheet metadata in `schema_bronze.sales_target_files`.
+
+    ```python
+    # loader/load_sales_target.py — Multi-Sheet Ingestion & Cleansing
+    def run():
+        batch_id = new_batch_id()
+        engine = get_db_engine()
+        service = get_service_account()
+        buffer = download_data(service, FILE_ID)
+        # sheet_name=None reads all sheets into a dictionary: {sheet_name: DataFrame}
+        all_sheets = read_data(FILE_NAME, buffer, sheet_name=None)
+        for sheet_name, df in all_sheets.items():
+            if df.empty:
+                continue
+            df_clean = _clean_sheet(df)
+            version_label = _extract_version_label(sheet_name, df_clean)
+            # Inject audit metadata
+            df_clean["_source_file"] = FILE_NAME
+            df_clean["_sheet_name"] = sheet_name
+            df_clean["_source_platform"] = "google_drive"
+            df_clean["_ingested_at"] = datetime.now()
+            df_clean["_batch_id"] = batch_id
+            # Append mode ensures historical versions are never overwritten
+            df_clean.to_sql("sales_targets_raw", con=engine, schema="schema_bronze", if_exists="append", index=False)
+    ```
+    
+
+#### Ingested Data Sources Summary (10 Sources · 164,901 Rows):
+| Source ID | Source Dataset | File Format | Bronze Table Name | Ingested Rows |
+| :---: | :--- | :---: | :--- | :---: |
+| `SRC-01` | Sales Transactions | CSV (20.6 MB) | `schema_bronze.sales_transactions` | 119,101 |
+| `SRC-02` | Sales Target Plan | XLSX (3 Sheets) | `schema_bronze.sales_targets_raw` | 1,955 |
+| `SRC-03` | Customer Master | CSV (375 KB) | `schema_bronze.customers` | 2,000 |
+| `SRC-04` | Product Master | XLSX (11 KB) | `schema_bronze.products` | 85 |
+| `SRC-05` | Distributor Orders | XLSB (3.5 MB) | `schema_bronze.distributor_orders` | 8,000 |
+| `SRC-06` | Distributor Master | CSV (29 KB) | `schema_bronze.distributors` | 138 |
+| `SRC-07` | Employee Master | XLSX (34 KB) | `schema_bronze.employees` | 150 |
+| `SRC-08` | Territory Mapping | XLSX (69 KB) | `schema_bronze.territory` | 63 |
+| `SRC-09` | Return Transactions | CSV (487 KB) | `schema_bronze.returns` | 3,665 |
+| `SRC-10` | Promotion Program | XLSX (9 KB) | `schema_bronze.promotions` | 10 |
 
 ---
 
-### 🥈 Tier 2: Silver Layer (Cleansing, Casting & Deduplication)
+### Phase 2: Silver Layer — Data Cleansing & Validation
+
 * **Objective:** Transform raw text attributes into cleaned, strongly-typed, and business-ready staging tables in `schema_silver`.
-* **Core Technical Implementations:**
-  * **Composite Key Deduplication:** 119,101 transaction items span 50,000 multi-item orders. Deduplication must be partitioned by the composite key `(order_id, product_id)`.
-  * **Data Standardization:** Trims whitespaces, standardizes casing (`UPPER`, `INITCAP`), coerces ISO-8601 dates (`YYYY-MM-DD`), and casts monetary values to `NUMERIC(15,2)`.
-  * **Quality Assertions:** Filters out corrupt negative quantities and enforces `net_amount <= gross_amount`.
+* **Automated Data Profiling (`loader/profilling.py`):**
+  * Scans all 10 Bronze tables column-by-column, computing data types, row counts, null counts, null percentages, distinct values, and sample values.
+  * Stores profiling metadata in `schema_bronze.profiling_summary` and exports an enterprise multi-tab workbook `Profiling_Report.xlsx`.
+* **SQL Staging Transformations (`silver/*.sql`):**
+  * **Strong Type Casting:** Converts raw text into native PostgreSQL types: `DATE`, `INTEGER`, `NUMERIC(15,2)`, and `BOOLEAN`.
+  * **Text Cleaning:** Standardizes whitespace via `TRIM()`, capitalizes codes via `UPPER()`, and formats names via `INITCAP()`.
+  * **Missing Value Imputation:** Handled missing attributes (e.g., `COALESCE(tax_code, 'UNREGISTERED')`).
+  * **Target Version Staging (`silver/silver_sales_targets.sql`):** Cleanses unpivoted target rows, deduplicates by composite key `(employee_id, plan_version, year, month)`, and removes residual header/total rows.
+  * **Composite Key Deduplication:** Eliminated order line duplicates generated from application submission retries using window functions:
+    <details>
+    <summary><b>🔍 View SQL (Click to Expand)</b></summary>
+    
+    ```sql
+    -- Extracted from silver/silver_sales_transactions.sql
+    DROP TABLE IF EXISTS schema_silver.sales_transactions;
+    
+    CREATE TABLE schema_silver.sales_transactions AS
+    WITH dedup AS (
+        SELECT
+            *,
+            -- Deduplicate composite grain and retain the latest ingested record
+            ROW_NUMBER() OVER (
+                PARTITION BY TRIM(order_id), TRIM(product_id)
+                ORDER BY _ingested_at DESC
+            ) AS rn
+        FROM schema_bronze.sales_transactions
+        WHERE order_id IS NOT NULL AND TRIM(order_id) <> ''
+    )
+    SELECT
+        TRIM(order_id)                                              AS order_id,
+        TO_DATE(NULLIF(TRIM(order_date), ''), 'YYYY-MM-DD')         AS order_date,
+        NULLIF(TRIM(order_month), '')::INT                          AS order_month,
+        NULLIF(TRIM(order_quarter), '')::INT                        AS order_quarter,
+        NULLIF(TRIM(order_year), '')::INT                           AS order_year,
+        TRIM(customer_id)                                           AS customer_id,
+        UPPER(TRIM(region))                                         AS region,
+        TRIM(province)                                              AS province,
+        UPPER(TRIM(channel))                                        AS channel,
+        TRIM(employee_id)                                           AS employee_id,
+        TRIM(product_id)                                            AS product_id,
+        UPPER(TRIM(product_category))                               AS product_category,
+        NULLIF(TRIM(quantity), '')::NUMERIC                         AS quantity,
+        NULLIF(TRIM(unit_price), '')::NUMERIC                       AS unit_price,
+        NULLIF(TRIM(discount_pct), '')::NUMERIC                     AS discount_pct,
+        NULLIF(TRIM(discount_amount), '')::NUMERIC                  AS discount_amount,
+        NULLIF(TRIM(gross_amount), '')::NUMERIC                     AS gross_amount,
+        NULLIF(TRIM(net_amount), '')::NUMERIC                       AS net_amount,
+        INITCAP(TRIM(delivery_status))                              AS delivery_status,
+        UPPER(TRIM(payment_method))                                 AS payment_method,
+        INITCAP(TRIM(payment_status))                               AS payment_status,
+        _source_file, _source_platform, _ingested_at, _batch_id
+    FROM dedup
+    WHERE rn = 1;
+    ```
+    </details>
 
 #### 🔬 Data Transformation Snapshot (Before vs After):
 | Attribute Field | Raw Data in Bronze Layer (`raw`) | Silver Cleansing Transformation | Standardized Silver Data (`clean`) |
@@ -229,169 +240,9 @@ def read_data(file_name, buffer, sheet_name=0):
 | `delivery_status` | `"delivered "` / `"DELIVERED"` | `INITCAP(TRIM(delivery_status))` | `'Delivered'` (Uniform Case) |
 | `_dedup_flag` | Multiple rows per `(order_id, sku)` | `ROW_NUMBER() OVER (...) = 1` | Retains latest row (**rn = 1**) |
 
-<details>
-<summary><b>🔍 View SQL Deduplication & Cleansing Query (Click to Expand)</b></summary>
-
-```sql
--- Extracted from silver/silver_sales_transactions.sql
-DROP TABLE IF EXISTS schema_silver.sales_transactions;
-
-CREATE TABLE schema_silver.sales_transactions AS
-WITH dedup AS (
-    SELECT
-        *,
-        -- Deduplicate composite grain and retain the latest ingested record
-        ROW_NUMBER() OVER (
-            PARTITION BY TRIM(order_id), TRIM(product_id)
-            ORDER BY _ingested_at DESC
-        ) AS rn
-    FROM schema_bronze.sales_transactions
-    WHERE order_id IS NOT NULL AND TRIM(order_id) <> ''
-)
-SELECT
-    TRIM(order_id)                                              AS order_id,
-    TO_DATE(NULLIF(TRIM(order_date), ''), 'YYYY-MM-DD')         AS order_date,
-    NULLIF(TRIM(order_month), '')::INT                          AS order_month,
-    NULLIF(TRIM(order_quarter), '')::INT                        AS order_quarter,
-    NULLIF(TRIM(order_year), '')::INT                           AS order_year,
-    TRIM(customer_id)                                           AS customer_id,
-    UPPER(TRIM(region))                                         AS region,
-    TRIM(province)                                              AS province,
-    UPPER(TRIM(channel))                                        AS channel,
-    TRIM(employee_id)                                           AS employee_id,
-    TRIM(product_id)                                            AS product_id,
-    UPPER(TRIM(product_category))                               AS product_category,
-    NULLIF(TRIM(quantity), '')::NUMERIC                         AS quantity,
-    NULLIF(TRIM(unit_price), '')::NUMERIC                       AS unit_price,
-    NULLIF(TRIM(discount_pct), '')::NUMERIC                     AS discount_pct,
-    NULLIF(TRIM(discount_amount), '')::NUMERIC                  AS discount_amount,
-    NULLIF(TRIM(gross_amount), '')::NUMERIC                     AS gross_amount,
-    NULLIF(TRIM(net_amount), '')::NUMERIC                       AS net_amount,
-    INITCAP(TRIM(delivery_status))                              AS delivery_status,
-    UPPER(TRIM(payment_method))                                 AS payment_method,
-    INITCAP(TRIM(payment_status))                               AS payment_status,
-    _source_file, _source_platform, _ingested_at, _batch_id
-FROM dedup
-WHERE rn = 1;
-```
-</details>
-
 ---
 
-### 🥇 Tier 3: Gold Layer (Kimball Star Schema & Analytical Marts)
-* **Objective:** Structure an enterprise Data Warehouse using Kimball Dimensional Modeling with integer surrogate keys, handle organizational change via **SCD Type 2**, and materialize analytical data marts.
-* **Core Technical Implementations:**
-  * **Surrogate Key Generation:** Replaces operational business keys with compact integer surrogate keys (`INT`/`BIGSERIAL`), accelerating multi-table JOIN performance.
-  * **Point-in-Time (AS-OF) Join:** When sales reps transfer across regional territories, transactions are linked to the employee record active during that specific transaction date (`order_date >= effective_date AND order_date < expiry_date`).
-
-> [!IMPORTANT]
-> **Engineering Highlight: Point-in-Time (AS-OF) Join with SCD Type 2 (`dim_employees`)**
-> 
-> Consider Sales Rep `EMP042` who transferred from Northern to Southern Vietnam on `2024-06-01`:
-> * An order placed on `2024-03-10` automatically resolves to `effective_date = 2024-01-01` → Correctly crediting revenue to **Northern Vietnam**.
-> * An order placed on `2024-08-20` automatically resolves to `effective_date = 2024-06-01` → Correctly crediting revenue to **Southern Vietnam**.
-> * **If joined conventionally with `is_current = TRUE`**, all Q1 historical sales would be erroneously credited to the Southern territory!
-
-```mermaid
-flowchart LR
-    subgraph Record_v1 ["Version 1 (employee_sk = 101)"]
-        A1["EMP042 — Nguyen Van A<br/>Region: Northern Region<br/>Active: 2024-01-01 ➔ 2024-05-31<br/><b>is_current = FALSE</b>"]
-    end
-    subgraph Record_v2 ["Version 2 (employee_sk = 205)"]
-        A2["EMP042 — Nguyen Van A<br/>Region: Southern Region<br/>Active: 2024-06-01 ➔ Present<br/><b>is_current = TRUE</b>"]
-    end
-    Record_v1 -->|Territory Reassignment 2024-06-01| Record_v2
-```
-
-<details>
-<summary><b>🔍 View SQL Point-in-Time Join Creating Fact Sales (Click to Expand)</b></summary>
-
-```sql
--- Extracted from gold/fact_sales.sql
-DROP TABLE IF EXISTS schema_gold.fact_sales;
-
-CREATE TABLE schema_gold.fact_sales AS
-SELECT
-    -- Degenerate Dimensions (Retained for granular line-item auditing)
-    s.order_id,
-    s.product_id,
-
-    -- Surrogate Keys (Star Schema Foreign Keys)
-    (TO_CHAR(s.order_date, 'YYYYMMDD'))::INT   AS date_id,
-    c.customer_sk,
-    p.product_sk,
-    e.employee_sk,   -- RESOLVES REQUISITE SCD2 SURROGATE KEY AT TRANSACTION TIME
-
-    s.channel,
-    s.region,
-    s.province,
-    s.delivery_status,
-    s.payment_method,
-
-    -- Financial Measures
-    s.quantity,
-    s.unit_price,
-    s.discount_amount,
-    s.gross_amount,
-    s.net_amount,
-    NOW() AS _loaded_at
-FROM schema_silver.sales_transactions s
-LEFT JOIN schema_gold.dim_customers c
-    ON s.customer_id = c.customer_id
-LEFT JOIN schema_gold.dim_products p
-    ON s.product_id = p.product_id
--- SCD Type 2 Point-in-Time Join matching effective historical range
-LEFT JOIN schema_gold.dim_employees e
-    ON s.employee_id = e.employee_id
-   AND s.order_date >= e.effective_date
-   AND (s.order_date < e.expiry_date OR e.expiry_date IS NULL);
-```
-</details>
-
----
-
-### ⚙️ Master Orchestration & Fail-Fast Gate (`main.py`)
-
-The centralized pipeline orchestrator `main.py` coordinates the end-to-end execution of Cloud Ingestion ➔ Bronze ➔ Silver ➔ Gold under a **Fail-Fast Policy**: if Silver staging encounters an exception or fails data quality gates, execution **aborts immediately**, preventing corrupted data from polluting the Gold reporting layer.
-
-> [!NOTE]
-> **Production Execution Telemetry (`schema_gold.pipeline_logs`):**
-> * 🥉 **STAGE 1 (BRONZE):** 44.40s (10 Google Drive loaders, 164,901 rows ingested).
-> * 🥈 **STAGE 2 (SILVER):** 3.55s (10 SQL cleansing and deduplication scripts).
-> * 🥇 **STAGE 3 (GOLD):** 0.85s (Star Schema DDL & 2 curated analytical marts).
-> * ⏱️ **Total Runtime:** **~48.80 seconds** (Fully automated & 100% idempotent).
-
-<details>
-<summary><b>🔍 View Fail-Fast Orchestration Logic in main.py (Click to Expand)</b></summary>
-
-```python
-# Extracted from main.py: Fail-Fast Orchestration Guard
-def main():
-    batch_id = uuid.uuid4()
-    conn = get_pg_connection()
-
-    # Stage 1: Bronze Ingestion (Automated Google Drive API stream)
-    run_stage(conn, batch_id, "BRONZE", run_bronze)
-
-    # Stage 2: Silver Cleansing & Dedup
-    silver_ok = run_stage(conn, batch_id, "SILVER", lambda: run_sql_batch(conn, SILVER_FILES))
-    if not silver_ok:
-        print("⛔ ABORTING PIPELINE: Silver layer failed. Gold stage halted!")
-        conn.close()
-        return
-
-    # Stage 3: Gold Modeling & Marts (Executes only when Silver succeeds 100%)
-    run_stage(conn, batch_id, "GOLD", lambda: run_sql_batch(conn, GOLD_FILES))
-    conn.close()
-```
-</details>
-
-[⬆ Back to Top](#)
-
----
-
-<a id="part-5"></a>
-## 📐 5. Gold Layer Kimball Star Schema Modeling
+### Phase 3: Gold Layer — Dimensional Modeling & Data Marts
 
 The curated Gold tier adheres to **Kimball Dimensional Modeling**, cleanly separating transactional fact events from shared conformed dimensions:
 
@@ -471,59 +322,158 @@ erDiagram
     }
 ```
 
-[⬆ Back to Top](#)
+#### 1. Conformed Star Schema Dimensions
+* **`dim_date`:** Pre-populated calendar table covering all operational years (date, day of week, month, quarter, year, fiscal year).
+* **`dim_customers`:** Customer master with customer types and geographic regions (SCD Type 1).
+* **`dim_products`:** SKU catalog, brand hierarchies, product categories, and unit standard costs (SCD Type 1).
+* **`dim_distributors`:** Regional wholesale distributors, tier levels, and assigned territories (SCD Type 2).
+* **`dim_employees` (SCD Type 2):** Tracks sales representative territory reassignments over time using historical date ranges (`effective_date`, `expiry_date`, `is_current`). When an employee transfers regions mid-year, the previous record is closed and a new record is created with an updated surrogate key (`employee_sk`), preserving historical reporting integrity.
 
----
-
-<a id="part-6"></a>
-## 🛒 6. Deep-Dive: Enterprise Analytical Data Marts
-
-Rather than burdening Power BI with massive table joins and multi-layered DAX queries, the pipeline pre-aggregates and materializes **2 domain-specific Data Marts** within the database:
+```sql
+-- gold/dim_employees.sql (SCD Type 2 Execution)
+-- Step 1: Close active records where tracked columns changed
+UPDATE schema_gold.dim_employees de
+SET
+    expiry_date = COALESCE(e.effective_date, CURRENT_DATE) - 1,
+    is_current  = FALSE
+FROM schema_silver.employees e
+WHERE de.employee_id = e.employee_id
+  AND de.is_current = TRUE
+  AND (
+        COALESCE(de.region, '') <> COALESCE(e.region, '')
+     OR COALESCE(de.team, '')   <> COALESCE(e.team, '')
+  );
+-- Step 2: Insert new versions for newly hired or updated employees
+INSERT INTO schema_gold.dim_employees (
+    employee_id, full_name, "position", region, team, effective_date, expiry_date, is_current
+)
+SELECT
+    e.employee_id, e.full_name, e."position", e.region, e.team,
+    COALESCE(e.effective_date, CURRENT_DATE) AS effective_date,
+    NULL                                      AS expiry_date,
+    TRUE                                      AS is_current
+FROM schema_silver.employees e
+LEFT JOIN schema_gold.dim_employees de
+    ON e.employee_id = de.employee_id AND de.is_current = TRUE
+WHERE de.employee_id IS NULL;
+```
+ **Engineering Highlight: Point-in-Time (AS-OF) Join with SCD Type 2 (`dim_employees`)**
+    Consider Sales Rep `EMP042` who transferred from Northern to Southern Vietnam on `2024-06-01`:
+    * An order placed on `2024-03-10` automatically resolves to `effective_date = 2024-01-01` → Correctly crediting revenue to **Northern Vietnam**.
+    * An order placed on `2024-08-20` automatically resolves to `effective_date = 2024-06-01` → Correctly crediting revenue to **Southern Vietnam**.
+    * **If joined conventionally with `is_current = TRUE`**, all Q1 historical sales would be erroneously credited to the Southern territory!
 
 ```mermaid
-flowchart TD
-    subgraph Facts ["Normalized Fact & Dimension Storage"]
-        F1["fact_sales<br/>(119.1K rows)"]
-        F2["fact_targets<br/>(Multi-version)"]
-        F3["fact_returns<br/>(3.6K rows)"]
-        F4["distributor_orders<br/>(8K rows)"]
-        D1["dim_employees (SCD2)"]
-        D2["dim_distributors"]
-        D3["dim_date"]
+flowchart LR
+    subgraph Record_v1 ["Version 1 (EMP042)"]
+        A1["EMP042 — Nguyen Van A<br/>Region: Northern Region<br/>Active: 2024-01-01 ➔ 2024-05-31<br/><b>is_current = FALSE</b>"]
     end
-
-    subgraph Marts ["🥇 BUSINESS DATA MARTS (Pre-aggregated)"]
-        M1["<b>mart_sales_vs_target</b><br/>• Grain: Employee - Year - Month<br/>• Multi-version Target Ranking<br/>• Net Sales adjusted for Returns"]
-        M2["<b>mart_distributor_performance</b><br/>• Grain: Distributor - Year - Month<br/>• Fill Rate % (Order Fulfillment)<br/>• On-Time SLA % (Delivery Quality)"]
+    subgraph Record_v2 ["Version 2 (EMP042)"]
+        A2["EMP042 — Nguyen Van A<br/>Region: Southern Region<br/>Active: 2024-06-01 ➔ Present<br/><b>is_current = TRUE</b>"]
     end
-
-    subgraph BI ["📊 BI & EXECUTIVE DASHBOARDS"]
-        B1["Sales Incentive & Quota Attainment"]
-        B2["Supply Chain & Logistics SLA Monitoring"]
-    end
-
-    F1 & F2 & F3 & D1 & D3 ==> M1
-    F4 & D2 & D3 ==> M2
-    M1 --> B1
-    M2 --> B2
-
-    style M1 fill:#065f46,stroke:#10b981,color:#ffffff,stroke-width:2px
-    style M2 fill:#1e40af,stroke:#3b82f6,color:#ffffff,stroke-width:2px
+    Record_v1 -->|Territory Reassignment 2024-06-01| Record_v2
 ```
 
----
+#### 2. Fact Tables
+* **`fact_sales`:** Granular sales transactions (1 row per line item). Resolves foreign keys to dimensions and performs a **Point-in-Time (AS-OF) Join** to `dim_employees`:
+  
+    <details>
+    <summary><b>🔍 View SQL Point-in-Time Join Creating Fact Sales (Click to Expand)</b></summary>
 
-### 6.1 Data Mart 1: `schema_gold.mart_sales_vs_target` (Sales Quota & Incentive Tracking)
-* **Business Objective:** Enables the Head of Sales to audit performance across 111 sales reps and calculate quarterly incentive bonuses based on net cash flow and the latest approved quota.
-* **Grain:** **1 record per `(employee_sk, year, month)`**. Total: **1,332 analytical rows**.
-* **Key Analytics Engineering Innovations:**
-  1. **Multi-Version Target Window Ranking:** A single employee can have multiple targets per month across revision cycles (`v1_Original`, `v2_Review`, `v3_Q4Push`). The query applies `ROW_NUMBER() OVER (PARTITION BY employee_sk, year, month ORDER BY version_date DESC NULLS LAST, plan_version DESC)` to dynamically isolate the **most recent active plan**, while keeping audit history preserved in `fact_targets`.
-  2. **Net Revenue Adjusted for Returns:** Reps might generate synthetic sales that are returned at month-end. The mart enforces true revenue reconciliation:
+    ```sql
+    -- Extracted from gold/fact_sales.sql
+    DROP TABLE IF EXISTS schema_gold.fact_sales;
 
-$$\text{Actual Net Revenue} = \text{Gross Sales Revenue} - \text{Total Return Amount}$$
+    CREATE TABLE schema_gold.fact_sales AS
+    SELECT
+        -- Degenerate Dimensions (Retained for granular line-item auditing)
+        s.order_id,
+        s.product_id,
 
-  3. **Full Outer Join Strategy:** Guarantees inclusion of reps who had targets but made zero sales (0% achievement), as well as new hires with early sales but no formal quota.
+        -- Surrogate Keys (Star Schema Foreign Keys)
+        (TO_CHAR(s.order_date, 'YYYYMMDD'))::INT   AS date_id,
+        c.customer_sk,
+        p.product_sk,
+        e.employee_sk,   -- RESOLVES REQUISITE SCD2 SURROGATE KEY AT TRANSACTION TIME
 
+        s.channel,
+        s.region,
+        s.province,
+        s.delivery_status,
+        s.payment_method,
+
+        -- Financial Measures
+        s.quantity,
+        s.unit_price,
+        s.discount_amount,
+        s.gross_amount,
+        s.net_amount,
+        NOW() AS _loaded_at
+    FROM schema_silver.sales_transactions s
+    LEFT JOIN schema_gold.dim_customers c
+        ON s.customer_id = c.customer_id
+    LEFT JOIN schema_gold.dim_products p
+        ON s.product_id = p.product_id
+    -- SCD Type 2 Point-in-Time Join matching effective historical range
+    LEFT JOIN schema_gold.dim_employees e
+        ON s.employee_id = e.employee_id
+    AND s.order_date >= e.effective_date
+    AND (s.order_date < e.expiry_date OR e.expiry_date IS NULL);
+    ```
+    </details>
+
+* **`fact_targets`:** Monthly revenue and customer target quotas per sales representative and plan version.
+* **`fact_returns`:** Product return events with return values and return reason codes.
+
+#### 3. Curated Analytical Data Marts (Pre-aggregated)
+Instead of burdening Power BI with multi-table joins and complex DAX formulas, the pipeline materializes 2 business-ready data marts:
+
+* **Data Mart 1: `schema_gold.mart_sales_vs_target` (Sales Quota & Incentive Attainment)**
+  * *Business Objective:* Enables the Head of Sales to audit performance across 111 sales reps and calculate quarterly incentive bonuses based on net cash flow and the latest approved quota.
+  * *Grain:* 1 row per `(employee_sk, year, month)`. Total: **1,332 rows**.
+  * *Business Logic:* Compares actual net revenue against assigned target quotas. Reconciles net cash revenue by deducting returns (`gross_actual_revenue - actual_return_amount`).
+  * *Multi-Version Resolution:* Dynamically filters to the **most recent approved plan version** using window ranking:
+    ```sql
+    -- gold/mart_sales_vs_target.sql (Key Logic)
+    WITH latest_target AS (
+        SELECT *,
+            ROW_NUMBER() OVER (
+                PARTITION BY employee_sk, year, month
+                ORDER BY version_date DESC NULLS LAST, plan_version DESC
+            ) AS rn
+        FROM schema_gold.fact_targets
+        WHERE employee_sk IS NOT NULL
+    ),
+    target_final AS (
+        SELECT * FROM latest_target WHERE rn = 1 -- Latest approved plan version
+    ),
+    actual_sales AS (
+        SELECT f.employee_sk, d.year, d.month, SUM(f.net_amount) AS actual_revenue
+        FROM schema_gold.fact_sales f
+        JOIN schema_gold.dim_date d ON f.date_id = d.date_id
+        GROUP BY f.employee_sk, d.year, d.month
+    ),
+    actual_returns AS (
+        SELECT r.employee_sk, d.year, d.month, SUM(r.return_amount) AS total_return_amount
+        FROM schema_gold.fact_returns r
+        JOIN schema_gold.dim_date d ON r.date_id = d.date_id
+        GROUP BY r.employee_sk, d.year, d.month
+    )
+    SELECT
+        c.employee_sk, de.employee_id, de.full_name, c.year, c.month, c.plan_version,
+        COALESCE(c.target_revenue, 0) AS target_revenue,
+        COALESCE(c.actual_revenue, 0) AS gross_actual_revenue,
+        COALESCE(ar.total_return_amount, 0) AS actual_return_amount,
+        -- Actual Net Revenue reconciled post-returns
+        COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0) AS actual_revenue,
+        CASE
+            WHEN COALESCE(c.target_revenue, 0) = 0 THEN NULL
+            ELSE ROUND((COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0)) / c.target_revenue * 100, 2)
+        END AS revenue_achievement_pct
+    FROM combined c
+    LEFT JOIN actual_returns ar ON c.employee_sk = ar.employee_sk AND c.year = ar.year AND c.month = ar.month
+    LEFT JOIN schema_gold.dim_employees de ON de.employee_sk = c.employee_sk;
+    ```
 #### 📋 Real Data Snapshot Extracted from `mart_sales_vs_target`:
 | Employee ID | Employee Name | Territory | Year | Month | Plan Version | Target Revenue | Gross Revenue | Return Amount | Net Actual Revenue | Quota Attainment (%) |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -531,98 +481,35 @@ $$\text{Actual Net Revenue} = \text{Gross Sales Revenue} - \text{Total Return Am
 | `EMP1002` | Ngo Thi Ha | NORTHERN | 2024 | 1 | `v1` | **271.10M** | 164.37M | 2.10M | **162.27M** | **59.86%** |
 | `EMP1003` | Pham Ba Binh | NORTHERN | 2024 | 1 | `v1` | **343.30M** | 132.84M | 0.57M | **132.27M** | **38.53%** |
 
-<details>
-<summary><b>🔍 View SQL DDL/DML for mart_sales_vs_target (Click to Expand)</b></summary>
+* **Data Mart 2: `schema_gold.mart_distributor_performance` (Wholesale Supply Chain SLA)**
+  * *Business Objective:* Enables the Chief Operating Officer (COO) to monitor wholesale order fulfillment across 138 exclusive regional distributors: Are distributors receiving their requested volumes? What percentage of orders comply with agreed delivery SLAs?
+  * *Grain:* 1 row per `(distributor_sk, year, month)`. Total: **1,480 rows**.
+  * *Business Logic:* Measures order fulfillment across wholesale distributors:
+    * `avg_fill_rate_pct`: Delivered quantity vs ordered quantity (`total_qty_delivered / total_qty_ordered * 100`).
+    * `ontime_delivery_rate_pct`: Percentage of shipments delivered within agreed carrier SLAs.
 
-```sql
--- Extracted from gold/mart_sales_vs_target.sql
-DROP TABLE IF EXISTS schema_gold.mart_sales_vs_target;
-
-CREATE TABLE schema_gold.mart_sales_vs_target AS
-WITH latest_target AS (
-    SELECT *,
-        ROW_NUMBER() OVER (
-            PARTITION BY employee_sk, year, month
-            ORDER BY version_date DESC NULLS LAST, plan_version DESC
-        ) AS rn
-    FROM schema_gold.fact_targets
-    WHERE employee_sk IS NOT NULL
-),
-target_final AS (
-    SELECT employee_sk, year, month, region, team, plan_version,
-           target_revenue, target_quantity, target_new_customers
-    FROM latest_target WHERE rn = 1
-),
-actual_sales AS (
-    SELECT f.employee_sk, d.year, d.month,
-           SUM(f.net_amount)              AS actual_revenue,
-           SUM(f.quantity)                AS actual_quantity,
-           COUNT(DISTINCT f.customer_sk)  AS actual_customers
-    FROM schema_gold.fact_sales f
-    JOIN schema_gold.dim_date d ON f.date_id = d.date_id
-    WHERE f.employee_sk IS NOT NULL
-    GROUP BY f.employee_sk, d.year, d.month
-),
-actual_returns AS (
-    SELECT r.employee_sk, d.year, d.month,
-           SUM(r.return_amount) AS total_return_amount
-    FROM schema_gold.fact_returns r
-    JOIN schema_gold.dim_date d ON r.date_id = d.date_id
-    WHERE r.employee_sk IS NOT NULL
-    GROUP BY r.employee_sk, d.year, d.month
-),
-combined AS (
-    SELECT COALESCE(t.employee_sk, a.employee_sk)   AS employee_sk,
-           COALESCE(t.year, a.year)                 AS year,
-           COALESCE(t.month, a.month)               AS month,
-           t.plan_version, t.region, t.team,
-           t.target_revenue, a.actual_revenue, a.actual_quantity, a.actual_customers
-    FROM target_final t
-    FULL OUTER JOIN actual_sales a
-        ON t.employee_sk = a.employee_sk AND t.year = a.year AND t.month = a.month
-)
-SELECT
-    c.employee_sk, de.employee_id, de.full_name, c.year, c.month, c.plan_version,
-    COALESCE(c.region, de.region)             AS region,
-    COALESCE(c.team, de.team)                 AS team,
-    COALESCE(c.target_revenue, 0)             AS target_revenue,
-    COALESCE(c.actual_revenue, 0)             AS gross_actual_revenue,
-    COALESCE(ar.total_return_amount, 0)       AS actual_return_amount,
-    -- Net actual revenue reflecting returned items
-    COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0) AS actual_revenue,
-    (COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0)) - COALESCE(c.target_revenue, 0) AS revenue_gap,
-    CASE
-        WHEN COALESCE(c.target_revenue, 0) = 0 THEN NULL
-        ELSE ROUND((COALESCE(c.actual_revenue, 0) - COALESCE(ar.total_return_amount, 0)) / c.target_revenue * 100, 2)
-    END                                        AS revenue_achievement_pct,
-    COALESCE(c.actual_quantity, 0)            AS actual_quantity,
-    COALESCE(c.actual_customers, 0)           AS actual_customers,
-    NOW() AS _loaded_at
-FROM combined c
-LEFT JOIN actual_returns ar
-    ON c.employee_sk = ar.employee_sk AND c.year = ar.year AND c.month = ar.month
-LEFT JOIN schema_gold.dim_employees de
-    ON de.employee_sk = c.employee_sk;
-```
-</details>
-
----
-
-### 6.2 Data Mart 2: `schema_gold.mart_distributor_performance` (Supply Chain SLA & Fulfillment)
-* **Business Objective:** Enables the Chief Operating Officer (COO) to monitor wholesale order fulfillment across 138 exclusive regional distributors: Are distributors receiving their requested volumes? What percentage of orders comply with agreed delivery SLAs?
-* **Grain:** **1 record per `(distributor_sk, year, month)`**. Total: **1,480 analytical rows**.
-* **Key Derived Performance Formulas:**
-  1. **Average Fill Rate (%):**
-
-$$\text{Fill Rate (\%)} = \left( \frac{\sum \text{Delivered Quantity}}{\sum \text{Ordered Quantity}} \right) \times 100\%$$
-
-     Monitors stockout severity across retail distribution channels.
-  2. **On-Time Delivery SLA Rate (%):**
-
-$$\text{On-Time Delivery Rate (\%)} = \left( \frac{\text{Orders Delivered On-Time}}{\text{Total Orders Delivered}} \right) \times 100\%$$
-
-     Enforced via conditional aggregation: `COUNT(*) FILTER (WHERE UPPER(ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))`.
-
+    ```sql
+    -- gold/mart_distributor_performance.sql (Key Logic)
+    SELECT
+        dd.distributor_sk, dd.distributor_id, dd.distributor_name, dd.tier, dd.region, d.year, d.month,
+        COUNT(DISTINCT o.order_id)  AS total_orders,
+        SUM(o.qty_ordered)          AS total_qty_ordered,
+        SUM(o.qty_delivered)        AS total_qty_delivered,
+        -- Average Fill Rate %
+        ROUND(AVG(o.fill_rate_pct), 2) AS avg_fill_rate_pct,
+        -- On-Time SLA Compliance Rate %
+        ROUND(
+            100.0 * COUNT(*) FILTER (WHERE UPPER(o.ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))
+            / NULLIF(COUNT(*), 0)
+        , 2) AS ontime_delivery_rate_pct
+    FROM schema_silver.distributor_orders o
+    JOIN schema_gold.dim_date d ON (TO_CHAR(o.order_date, 'YYYYMMDD'))::INT = d.date_id
+    LEFT JOIN schema_gold.dim_distributors dd
+        ON o.distributor_id = dd.distributor_id
+    AND o.order_date >= dd.effective_date
+    AND (o.order_date <= dd.expiry_date OR dd.expiry_date IS NULL)
+    GROUP BY dd.distributor_sk, dd.distributor_id, dd.distributor_name, dd.tier, dd.region, d.year, d.month;
+    ```
 #### 📋 Real Data Snapshot Extracted from `mart_distributor_performance`:
 | Distributor ID | Distributor Name | Tier | Region | Year | Month | Total Orders | Ordered Qty | Delivered Qty | Fill Rate (%) | On-Time SLA (%) |
 | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
@@ -630,159 +517,182 @@ $$\text{On-Time Delivery Rate (\%)} = \left( \frac{\text{Orders Delivered On-Tim
 | `DIST0002` | Le Cong Mai Trading JSC | RETAIL POINT | NORTHERN | 2024 | 1 | 4 | 3,635 units | 3,254 units | **90.53%** | **42.86%** |
 | `DIST0003` | Nguyen Cong Khoa Co., Ltd | RETAIL POINT | NORTHERN | 2024 | 1 | 4 | 3,975 units | 3,313 units | **85.21%** | **53.33%** |
 
-<details>
-<summary><b>🔍 View SQL DDL/DML for mart_distributor_performance (Click to Expand)</b></summary>
+---
 
-```sql
--- Extracted from gold/mart_distributor_performance.sql
-DROP TABLE IF EXISTS schema_gold.mart_distributor_performance;
+### Phase 4: Serving & Business Intelligence (Power BI)
 
-CREATE TABLE schema_gold.mart_distributor_performance AS
-SELECT
-    dd.distributor_sk,
-    dd.distributor_id,
-    dd.distributor_name,
-    dd.tier,
-    dd.region,
-    d.year,
-    d.month,
+* **File:** `main.py`
+* **Technical Explanation:** Executes Bronze → Silver → Gold sequentially. If Silver staging encounters an exception or fails data quality gates, the pipeline **aborts immediately**, preventing bad data from contaminating Gold reporting tables:
 
-    COUNT(DISTINCT o.order_id)                       AS total_orders,
-    SUM(o.qty_ordered)                               AS total_qty_ordered,
-    SUM(o.qty_delivered)                             AS total_qty_delivered,
-    SUM(o.gross_amount)                              AS total_gross_amount,
-    SUM(o.delivered_amount)                          AS total_delivered_amount,
-    ROUND(AVG(o.fill_rate_pct), 2)                   AS avg_fill_rate_pct,
+    ```python
+    # main.py — Fail-Fast Orchestration
+    def main():
+        batch_id = uuid.uuid4()
+        conn = get_pg_connection()
+        print(f"🚀 Bắt đầu chạy pipeline VietDist — batch_id: {batch_id}")
+    
+        # Stage 1: Bronze Ingestion
+        if not run_stage(conn, batch_id, "BRONZE", run_bronze):
+            print("⛔ Dừng pipeline: lỗi hạ tầng ở stage BRONZE.")
+            conn.close()
+            return
+    
+        # Stage 2: Silver Cleansing & Dedup
+        if not run_stage(conn, batch_id, "SILVER", lambda: run_sql_batch(conn, SILVER_FILES)):
+            print("⛔ Dừng pipeline: Silver lỗi -> không chạy Gold (Gold phụ thuộc Silver).")
+            conn.close()
+            return
+    
+        # Stage 3: Gold Modeling & Marts (Runs only if Silver succeeds 100%)
+        run_stage(conn, batch_id, "GOLD", lambda: run_sql_batch(conn, GOLD_FILES))
+        conn.close()
+    ```
 
-    ROUND(
-        100.0 * COUNT(*) FILTER (WHERE UPPER(o.ontime_delivery) IN ('YES', 'TRUE', '1', 'Y'))
-        / NULLIF(COUNT(*), 0)
-    , 2)                                             AS ontime_delivery_rate_pct,
+* **Direct Warehouse Connection:** Power BI Desktop (`VietDist_Corporation.pbix`) connects directly to PostgreSQL `schema_gold.mart_sales_vs_target` and `schema_gold.mart_distributor_performance`.
+* **Performance Gain:** Report refresh latency is reduced from **15–30 minutes** in raw Power Query to **under 10 seconds** from PostgreSQL pre-computed marts.
+* **Simplified DAX:** Eliminates complicated `CALCULATE`, `FILTER`, and version-matching DAX logic on the client, utilizing simple aggregations (`SUM(actual_revenue)`, `AVERAGE(avg_fill_rate_pct)`).
+* **Single Source of Truth:** Business rules (net return deduction, target version ranking, SCD2 territory attribution) are codified once in the data warehouse, ensuring 100% organizational consistency.
 
-    NOW() AS _loaded_at
-FROM schema_silver.distributor_orders o
-JOIN schema_gold.dim_date d
-    ON (TO_CHAR(o.order_date, 'YYYYMMDD'))::INT = d.date_id
-LEFT JOIN schema_gold.dim_distributors dd
-    ON o.distributor_id = dd.distributor_id
-   AND o.order_date >= dd.effective_date
-   AND (o.order_date <= dd.expiry_date OR dd.expiry_date IS NULL)
-GROUP BY dd.distributor_sk, dd.distributor_id, dd.distributor_name, dd.tier, dd.region, d.year, d.month;
-```
+---
+
+## 📖 4. Data Dictionary — Comprehensive Table Overview
+
+> For the granular, column-level data dictionary (including data types, nullability, constraints, and business logic for all 20+ physical tables), refer to the dedicated [DATA_DICTIONARY.md](DATA_DICTIONARY.md).
+
+### 4.1 Bronze Layer Tables (`schema_bronze`)
+<details><summary><b>Click to Expand</b></summary>
+    
+| Table Name | Grain (1 Row Level) | Source File | Description | Primary / Composite Key |
+| :--- | :--- | :--- | :--- | :--- |
+| **`sales_transactions`** | 1 line item in an order | `SRC01_sales_transactions.csv` | Raw transactional sales events across retail and direct channels. All columns TEXT. | Composite: `(order_id, product_id)` |
+| **`sales_targets_raw`** | 1 monthly rep quota | `SRC02_sales_target_plan.xlsx` | Raw unpivoted target lines for all version revisions (v1, v2, v3). | Synthetic: `id` |
+| **`sales_target_files`** | 1 Excel sheet (plan version) | `SRC02_sales_target_plan.xlsx` | Metadata tracking each ingested target plan version, sheet name, and row count. | Primary: `id` |
+| **`customers`** | 1 customer profile | `SRC03_customer_master.csv` | Raw retail customer master, store classification, channel, and address. | Natural Key: `customer_id` |
+| **`products`** | 1 SKU item | `SRC04_product_master.xlsx` | Raw product catalog, brand hierarchies, packaging, and list price. | Natural Key: `product_id` |
+| **`distributor_orders`** | 1 wholesale order item | `SRC05_distributor_orders.xlsx` | Wholesale fulfillment lines from regional distributors, ordered vs delivered qty. | Composite: `(order_id, product_id)` |
+| **`distributors`** | 1 wholesale distributor | `SRC06_distributor_master.csv` | Distributor profiles, wholesale tier levels, and designated distribution hubs. | Natural Key: `distributor_id` |
+| **`employees`** | 1 sales representative | `SRC07_employee_master.xlsx` | Sales rep demographic data, hire dates, regions, and team assignments. | Natural Key: `employee_id` |
+| **`territory`** | 1 province / city mapping | `SRC08_territory_mapping.xlsx` | Geographic mappings aligning provinces into Northern, Central, and Southern regions. | Natural Key: `province` |
+| **`returns`** | 1 return transaction line | `SRC09_return_transactions.csv` | Return transaction events, return reasons, and refunded monetary amounts. | Natural Key: `return_id` |
+| **`promotions`** | 1 promotional campaign | `SRC10_promotion_program.xlsx` | Marketing discounts, campaign start/end dates, and budget parameters. | Natural Key: `promo_id` |
+| **`ingest_log`** | 1 file ingestion event | Pipeline Telemetry | Audit log tracking pipeline run batch ID, execution time, and load status. | Primary: `log_id` |
+| **`profiling_summary`**| 1 column in a Bronze table | Profiling Runner | Column-level quality audit metrics: null counts, null percentages, distinct values. | Primary: `id` |
+
 </details>
 
-[⬆ Back to Top](#)
+---
+
+### 4.2 Silver Layer Tables (`schema_silver`)
+<details><summary><b>Click to Expand</b></summary>
+
+| Table Name | Grain (1 Row Level) | Source Table (`schema_bronze`) | Cleansing & Transformation Logic | Keys & Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| **`sales_transactions`** | 1 line item per order | `sales_transactions` | Deduplicated via composite key window ranking (`rn = 1`); cast to `DATE`, `NUMERIC(15,2)`, `INTEGER`; strings normalized (`TRIM`, `UPPER`). | Composite PK: `(order_id, product_id)` |
+| **`sales_targets`** | 1 rep target per month/ver | `sales_targets_raw` | Cleaned unpivoted target lines; filtered out summary/total rows; deduplicated by `(employee_id, plan_version, year, month)`. | Composite: `(employee_id, plan_version, year, month)` |
+| **`customers`** | 1 customer profile | `customers` | Stripped whitespaces, standardized channel casing, imputed missing tax codes as `'UNREGISTERED'`. | Primary Key: `customer_id` |
+| **`products`** | 1 product SKU | `products` | Standardized category casing; cast unit costs and prices to `NUMERIC(15,2)`. | Primary Key: `product_id` |
+| **`distributors`** | 1 distributor profile | `distributors` | Standardized tier codes (`TIER 1`, `TIER 2`); validated contact numbers and province names. | Primary Key: `distributor_id` |
+| **`distributor_orders`** | 1 wholesale order item | `distributor_orders` | Type-casted order and delivery dates, computed line fulfillment values, deduplicated composite keys. | Composite PK: `(order_id, product_id)` |
+| **`employees`** | 1 employee profile | `employees` | Formatted join dates and birth dates; standardized regional sales team designations. | Primary Key: `employee_id` |
+| **`territory`** | 1 province mapping | `territory` | Standardized province names to match customer and distributor regional hierarchies. | Primary Key: `province` |
+| **`return_transactions`**| 1 return record | `returns` | Normalized return reason codes, cast return dates, validated positive return monetary values. | Primary Key: `return_id` |
+| **`promotion_program`** | 1 promotional program | `promotions` | Validated campaign date intervals (`start_date <= end_date`), cast discount percentages. | Primary Key: `promo_id` |
+
+</details>
 
 ---
 
-<a id="part-7"></a>
-## 🛡️ 7. Data Quality Gates & BI Performance Benchmark
+### 4.3 Gold Layer Tables (`schema_gold`)
+<details><summary><b>Dimensions & Facts:</b></summary>
 
-### 7.1 Automated Data Quality Gates
-To ensure data reliability before downstream reporting, the pipeline enforces **5 automated quality gates**:
+| Table Name | Type | Grain | Purpose & Key Attributes | SCD Type / Join Strategy |
+| :--- | :---: | :--- | :--- | :---: |
+| **`dim_date`** | Dimension | 1 calendar day | Date dimension supporting time intelligence (year, quarter, month, day of week, fiscal year). | Static (`date_id = YYYYMMDD`) |
+| **`dim_customers`** | Dimension | 1 customer | Conformed customer master with customer types and geographic regions. | SCD Type 1 (`customer_sk`) |
+| **`dim_products`** | Dimension | 1 product SKU | Conformed product catalog with brand hierarchies, categories, and standard unit costs. | SCD Type 1 (`product_sk`) |
+| **`dim_distributors`** | Dimension | 1 distributor | Wholesale distributor profiles, commercial tier levels, and designated logistics hubs. | SCD Type 2 (`distributor_sk`) |
+| **`dim_employees`** | Dimension | 1 employee version | Tracks sales representative territory reassignments using `effective_date`, `expiry_date`, and `is_current`. | **SCD Type 2** (`employee_sk`) |
+| **`fact_sales`** | Fact | 1 line item sold | Core sales fact containing quantities, prices, discounts, gross/net revenue. | **Point-in-Time Join** to `dim_employees` |
+| **`fact_targets`** | Fact | 1 target quota | Quota assignments per sales rep, year, month, and plan version revision. | Temporal (`target_id`) |
+| **`fact_returns`** | Fact | 1 return line | Returned merchandise lines, return quantities, and refunded values. | Fact (`return_sk`) |
+| **`fact_distributor_orders`**| Fact | 1 wholesale line | Distributor order fulfillment monitoring ordered quantity vs delivered quantity. | Fact (`order_item_sk`) |
 
-| Quality Gate | Layer | Verification Rule (Assertion) | Empirical Validation Result |
-| :--- | :---: | :--- | :---: |
-| **1. Uniqueness Gate** | Silver | Composite key `(order_id, product_id)` must be unique. | **0 duplicates** (`HAVING COUNT(*) > 1` = 0) |
-| **2. Not-Null Integrity Gate** | Silver | Primary business keys and timestamps must not be NULL. | **100% Not-Null conformance** on IDs |
-| **3. Financial Balance Gate** | Silver | Net revenue must always be less than or equal to gross revenue. | **0 violations** (`net_amount <= gross_amount`) |
-| **4. Referential Integrity** | Gold | No orphan foreign keys between Fact and Dimension tables. | **100% valid surrogate key references** |
-| **5. SCD2 Overlap Gate** | Gold | `[effective_date, expiry_date)` ranges must not overlap. | **100% contiguous historical ranges** |
+</details>
 
+<details><summary><b>Data Marts (Pre-aggregated for BI):</b></summary>
+    
+| Data Mart Name | Grain (1 Row Level) | Total Rows | Target BI Report | Key Business Metrics Provided |
+| :--- | :--- | :---: | :--- | :--- |
+| **`mart_sales_vs_target`** | `(employee_sk, year, month)` | **1,332** | Sales Quota & Incentive Tracking | `target_revenue`, `gross_actual_revenue`, `actual_return_amount`, `actual_revenue` (Net), `revenue_gap`, `revenue_achievement_pct`. |
+| **`mart_distributor_performance`** | `(distributor_sk, year, month)` | **1,480** | Wholesale Supply Chain & SLA Dashboard | `total_orders`, `total_qty_ordered`, `total_qty_delivered`, `avg_fill_rate_pct`, `ontime_delivery_rate_pct`. |
+</details>
 ---
 
-### 7.2 Performance Benchmark: Medallion PostgreSQL vs Traditional Power Query
+## 📁 5. Repository Structure
 
-| Evaluation Metric | Raw Processing in Power Query / DAX ❌ | Medallion Data Marts in PostgreSQL ✅ |
-| :--- | :--- | :--- |
-| **Data Refresh Latency** | **15 – 30 minutes** (Power Query repeatedly pulls 25MB from Google Drive and executes M-code). | **< 10 seconds** (Power BI loads pre-computed summary marts of only 1,332 & 1,480 rows). |
-| **DAX Complexity** | Requires complex, multi-layered DAX (`CALCULATE`, `FILTER`, `EARLIER`) to net returns and filter versions. | **Ultra-simple DAX** (`SUM(actual_revenue)`, `AVERAGE(avg_fill_rate_pct)`). |
-| **Single Source of Truth** | High risk of calculation discrepancies as individual departments write conflicting DAX formulas. | **100% organizational consistency** guaranteed by central warehouse logic. |
-| **Client Memory Overhead** | Consumes heavy client RAM, causing frequent Power BI Desktop freezes. | **Compute offloaded to Database**, supporting high-concurrency DirectQuery and Scheduled Import. |
-
-[⬆ Back to Top](#)
-
----
-
-<a id="part-8"></a>
-## 📊 8. Executive Business Insights from Data Marts
-
-With the curated Gold Data Marts in place, operational and commercial bottlenecks were quantified across FY2024:
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                          📊 FY2024 KEY PERFORMANCE METRICS                             │
-├───────────────────────────────┬───────────────────────────────┬────────────────────────┤
-│        TOTAL NET REVENUE      │     SALES QUOTA ATTAINMENT    │    AVG ORDER FILL RATE │
-│         158.96B VND           │            51.19%             │             84.63%     │
-│  (Gross: 163.85B | Disc: 4.89B)│ (Actual: 157.65B / 290.74B)  │ (1.43M Units Deficit)  │
-└───────────────────────────────┴───────────────────────────────┴────────────────────────┘
-```
-
-### 1. Significant Quota Deficit — `mart_sales_vs_target`
-* **Target vs Actual Revenue:** Quota was set at **290.74B VND**, while actual net sales reached **157.65B VND** → **Company-wide attainment stood at 51.19%** (a shortfall of **133.09B VND**).
-* **Team Disparity:** Only **14 of 111 Sales Reps (12.6%)** achieved >80% of their assigned quotas. Root cause analysis reveals initial planning (`Plan_v1`) set aggressive targets (+65% YoY) that failed to account for macro market softening.
-
-### 2. Supply Chain Fulfillment Bottlenecks — `mart_distributor_performance`
-* **Fill Rate:** Averaged **84.63%** (9.42M units ordered vs 7.99M delivered → **1.43M unit supply deficit**).
-* **On-Time SLA:** Only **40.36% of orders met delivery SLAs**, with an average delay of **2.8 days**, driving stockouts at retail points and forfeiting sales to competing brands.
-
-### 3. Return Concentration — `fact_returns`
-* Returned merchandise totaled **1.31B VND** across 3,665 return events. Food & Beverage products accounted for **68.4% of total returns** due to stringent expiration date thresholds enforced by modern retail chains.
-
-[⬆ Back to Top](#)
-
----
-
-<a id="part-9"></a>
-## 🚀 9. Project Structure & Quickstart Guide
-
-### 9.1 Project Directory Structure
 ```
 medallion-datapipeline/
-├── config/                      # GCP Service Account credentials (.json)
-│   └── .gitkeep                 # Directory placeholder for cloned environments
-├── gold/                        # 10 Gold Tier DDL & DML Scripts (Star Schema & Marts)
-│   ├── dim_customers.sql        # Customer dimension
-│   ├── dim_date.sql             # 366-day calendar dimension
-│   ├── dim_distributors.sql     # Distributor dimension
-│   ├── dim_employees.sql        # SCD Type 2 organizational history
-│   ├── dim_products.sql         # Product dimension
+├── assets/pipeline/             # Architectural and process infographics
+│   ├── step_1_architecture_blueprint.png
+│   ├── step_2_bronze_ingestion_profiling.png
+│   ├── step_3_silver_cleansing_normalization.png
+│   ├── step_4_gold_kimball_scd2.png
+│   └── step_5_orchestration_analytics.png
+├── config/                      # Service Account credentials directory (.gitkeep)
+├── gold/                        # Gold tier DDL & DML SQL scripts
+│   ├── dim_customers.sql        # Customer dimension (SCD1)
+│   ├── dim_date.sql             # Calendar dimension
+│   ├── dim_distributors.sql     # Distributor dimension (SCD2)
+│   ├── dim_employees.sql        # Employee dimension (SCD2 historical tracking)
+│   ├── dim_products.sql         # Product dimension (SCD1)
 │   ├── fact_distributor_orders.sql
-│   ├── fact_returns.sql         # Return transactions fact
-│   ├── fact_sales.sql           # Sales line transactions fact (Point-in-Time Join)
-│   ├── mart_distributor_performance.sql # Supply Chain SLA Data Mart
-│   └── mart_sales_vs_target.sql # Sales Quota & Incentive Data Mart
-├── loader/                      # 10 Bronze Ingestion Python Modules (Google Drive)
-│   ├── load_sales_transaction.py# Chunked streaming loader for 20.6 MB dataset
-│   ├── load_sales_target.py     # Multi-version Excel unpivot loader
-│   ├── profilling.py            # Automated data profiling script
-│   └── ...                      # Remaining ingestion modules
-├── silver/                      # 10 Silver Cleansing SQL Scripts
+│   ├── fact_returns.sql         # Product returns fact
+│   ├── fact_sales.sql           # Sales fact with Point-in-Time join
+│   ├── fact_targets.sql         # Sales quota fact
+│   ├── mart_distributor_performance.sql # Distributor supply chain SLA mart
+│   └── mart_sales_vs_target.sql # Quota attainment and incentive mart
+├── loader/                      # Bronze ingestion Python loaders
+│   ├── load_customer.py         # Customer loader
+│   ├── load_distributor.py      # Distributor loader
+│   ├── load_distributor_orders.py # Binary XLSB order loader
+│   ├── load_employee.py         # Employee loader
+│   ├── load_product.py          # Product loader
+│   ├── load_promotion.py        # Promotion loader
+│   ├── load_return.py           # Return loader
+│   ├── load_sales_target.py     # Multi-version sales target unpivot loader
+│   ├── load_sales_transaction.py# Sales transaction loader (119k rows)
+│   ├── loader_territory.py      # Territory mapping loader
+│   └── profilling.py            # Automated Bronze data profiling runner
+├── silver/                      # Silver tier cleansing SQL scripts
+│   ├── silver_customers.sql
+│   ├── silver_distributor_orders.sql
+│   ├── silver_distributors.sql
+│   ├── silver_employees.sql
+│   ├── silver_products.sql
+│   ├── silver_promotion_program.sql
+│   ├── silver_return_transactions.sql
+│   ├── silver_sales_targets.sql # Target deduplication and version staging
 │   ├── silver_sales_transactions.sql # Composite key deduplication
-│   ├── silver_customers.sql     # Tax code imputation and string cleaning
-│   ├── silver_territory.sql     # Territory mapping staging
-│   └── ...                      # Remaining silver scripts
-├── utils/                       # Shared Database & Google Drive API v3 Utilities
-│   ├── db_utils.py              # Service Account auth, BytesIO streaming, DB engine
-│   └── file_parser.py           # Stream decoding, BOM stripping (UTF-8-SIG)
-├── VietDist_SampleData/         # Local backup sample datasets (CSV & XLSX)
-├── .env.example                 # Environment variable template & Drive File IDs
-├── DATA_DICTIONARY.md           # Enterprise Technical Data Catalog (360+ lines)
-├── init_db.sql                  # Database schema initialization script
-├── main.py                      # Centralized Fail-Fast Pipeline Orchestrator
-├── Profiling_Report.xlsx        # Automated data quality profiling report
-├── README.md                    # Project documentation
-└── requirements.txt             # Python dependencies (google-api-python-client, psycopg2, pandas)
+│   └── silver_territory.sql
+├── utils/                       # Shared utility modules
+│   ├── db_utils.py              # Database connection, Drive API streaming, logging
+│   └── file_parser.py           # Multi-format stream parser (CSV, XLSX, XLSB)
+├── VietDist_SampleData/         # Local sample backup datasets
+├── .env.example                 # Environment variable template
+├── DATA_DICTIONARY.md           # Physical schema data dictionary
+├── init_db.sql                  # Database and 3-tier schema initialization
+├── main.py                      # Master pipeline orchestrator (Fail-Fast)
+├── Profiling_Report.xlsx        # Data profiling report across 10 tables
+├── VietDist_Corporation.pbix    # Production Power BI report
+├── requirements.txt             # Python project dependencies
+└── README.md                    # Project documentation
 ```
+---
 
-## 👤 9. Author & Contact
+## 👤 6. Author & Contact
 
 * **Author:** **Nguyen Xuan Thu**
-* **Role:** Data Analyst / Analytics Engineer
 * **Email:** [thu.nx280@gmail.com](mailto:thu.nx280@gmail.com)
 * **GitHub Profile:** [https://github.com/thunx280-ctrl](https://github.com/thunx280-ctrl)
 * **GitHub Repository:** [https://github.com/thunx280-ctrl/medallion-datapipeline](https://github.com/thunx280-ctrl/medallion-datapipeline)
 
----
-*⭐ If you find this Medallion Data Pipeline project insightful or helpful, feel free to give the repository a star!*
