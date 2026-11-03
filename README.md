@@ -13,17 +13,17 @@
 ---
 
 ## 📌 Table of Contents
-1. [Project Overview & Business Context](#1-project-overview--business-context)
-2. [System Architecture & Workflow](#2-system-architecture--workflow)
-3. [Implementation Tasks by Phase](#3-implementation-tasks-by-phase)
+1. [Project Overview & Business Context](#-1-project-overview--business-context)
+2. [System Architecture & Workflow](#-2-system-architecture--workflow)
+3. [Implementation Tasks by Phase](#-3-implementation-tasks-by-phase)
    - [Phase 0: Environment & Database Setup](#phase-0-environment--database-setup)
    - [Phase 1: Bronze Layer — Ingestion & Raw Storage](#phase-1-bronze-layer--ingestion--raw-storage)
    - [Phase 2: Silver Layer — Data Cleansing & Validation](#phase-2-silver-layer--data-cleansing--validation)
    - [Phase 3: Gold Layer — Dimensional Modeling & Data Marts](#phase-3-gold-layer--dimensional-modeling--data-marts)
    - [Phase 4: Serving & Business Intelligence (Power BI)](#phase-4-serving--business-intelligence-power-bi)
-4. [📖 Data Dictionary — Comprehensive Table Overview](#4--data-dictionary--comprehensive-table-overview)
-5. [📁 Repository Structure](#5-repository-structure)
-6. [👤 Author & Contact](#6-author--contact)
+4. [📖 Data Dictionary — Comprehensive Table Overview](#-4--data-dictionary--comprehensive-table-overview)
+5. [📁 Repository Structure](#-5-repository-structure)
+6. [👤 Author & Contact](#-6-author--contact)
 
 ---
 
