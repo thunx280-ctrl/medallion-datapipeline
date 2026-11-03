@@ -22,7 +22,7 @@
    - [Phase 3: Gold Layer — Dimensional Modeling & Data Marts](#phase-3-gold-layer--dimensional-modeling--data-marts)
    - [Phase 4: Serving & Business Intelligence (Power BI)](#phase-4-serving--business-intelligence-power-bi)
 4. [📖 Data Dictionary — Comprehensive Table Overview](#4--data-dictionary--comprehensive-table-overview)
-5. [📁 Repository Structure & How to Run](#5-repository-structure--how-to-run)
+5. [📁 Repository Structure](#5-repository-structure)
 6. [👤 Author & Contact](#6-author--contact)
 
 ---
