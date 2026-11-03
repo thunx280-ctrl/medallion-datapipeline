@@ -155,19 +155,19 @@ flowchart LR
     ```
     
 
-#### Ingested Data Sources Summary (10 Sources · 164,901 Rows):
-| Source ID | Source Dataset | File Format | Bronze Table Name | Ingested Rows |
-| :---: | :--- | :---: | :--- | :---: |
-| `SRC-01` | Sales Transactions | CSV (20.6 MB) | `schema_bronze.sales_transactions` | 119,101 |
-| `SRC-02` | Sales Target Plan | XLSX (3 Sheets) | `schema_bronze.sales_targets_raw` | 1,955 |
-| `SRC-03` | Customer Master | CSV (375 KB) | `schema_bronze.customers` | 2,000 |
-| `SRC-04` | Product Master | XLSX (11 KB) | `schema_bronze.products` | 85 |
-| `SRC-05` | Distributor Orders | XLSB (3.5 MB) | `schema_bronze.distributor_orders` | 8,000 |
-| `SRC-06` | Distributor Master | CSV (29 KB) | `schema_bronze.distributors` | 138 |
-| `SRC-07` | Employee Master | XLSX (34 KB) | `schema_bronze.employees` | 150 |
-| `SRC-08` | Territory Mapping | XLSX (69 KB) | `schema_bronze.territory` | 63 |
-| `SRC-09` | Return Transactions | CSV (487 KB) | `schema_bronze.returns` | 3,665 |
-| `SRC-10` | Promotion Program | XLSX (9 KB) | `schema_bronze.promotions` | 10 |
+   #### Ingested Data Sources Summary (10 Sources · 164,901 Rows):
+   | Source ID | Source Dataset | File Format | Bronze Table Name | Ingested Rows |
+   | :---: | :--- | :---: | :--- | :---: |
+   | `SRC-01` | Sales Transactions | CSV (20.6 MB) | `schema_bronze.sales_transactions` | 119,101 |
+   | `SRC-02` | Sales Target Plan | XLSX (3 Sheets) | `schema_bronze.sales_targets_raw` | 1,955 |
+   | `SRC-03` | Customer Master | CSV (375 KB) | `schema_bronze.customers` | 2,000 |
+   | `SRC-04` | Product Master | XLSX (11 KB) | `schema_bronze.products` | 85 |
+   | `SRC-05` | Distributor Orders | XLSB (3.5 MB) | `schema_bronze.distributor_orders` | 8,000 |
+   | `SRC-06` | Distributor Master | CSV (29 KB) | `schema_bronze.distributors` | 138 |
+   | `SRC-07` | Employee Master | XLSX (34 KB) | `schema_bronze.employees` | 150 |
+   | `SRC-08` | Territory Mapping | XLSX (69 KB) | `schema_bronze.territory` | 63 |
+   | `SRC-09` | Return Transactions | CSV (487 KB) | `schema_bronze.returns` | 3,665 |
+   | `SRC-10` | Promotion Program | XLSX (9 KB) | `schema_bronze.promotions` | 10 |
 
 ---
 
@@ -329,34 +329,34 @@ erDiagram
 * **`dim_distributors`:** Regional wholesale distributors, tier levels, and assigned territories (SCD Type 2).
 * **`dim_employees` (SCD Type 2):** Tracks sales representative territory reassignments over time using historical date ranges (`effective_date`, `expiry_date`, `is_current`). When an employee transfers regions mid-year, the previous record is closed and a new record is created with an updated surrogate key (`employee_sk`), preserving historical reporting integrity.
 
-```sql
--- gold/dim_employees.sql (SCD Type 2 Execution)
--- Step 1: Close active records where tracked columns changed
-UPDATE schema_gold.dim_employees de
-SET
-    expiry_date = COALESCE(e.effective_date, CURRENT_DATE) - 1,
-    is_current  = FALSE
-FROM schema_silver.employees e
-WHERE de.employee_id = e.employee_id
-  AND de.is_current = TRUE
-  AND (
-        COALESCE(de.region, '') <> COALESCE(e.region, '')
-     OR COALESCE(de.team, '')   <> COALESCE(e.team, '')
-  );
--- Step 2: Insert new versions for newly hired or updated employees
-INSERT INTO schema_gold.dim_employees (
-    employee_id, full_name, "position", region, team, effective_date, expiry_date, is_current
-)
-SELECT
-    e.employee_id, e.full_name, e."position", e.region, e.team,
-    COALESCE(e.effective_date, CURRENT_DATE) AS effective_date,
-    NULL                                      AS expiry_date,
-    TRUE                                      AS is_current
-FROM schema_silver.employees e
-LEFT JOIN schema_gold.dim_employees de
-    ON e.employee_id = de.employee_id AND de.is_current = TRUE
-WHERE de.employee_id IS NULL;
-```
+   ```sql
+   -- gold/dim_employees.sql (SCD Type 2 Execution)
+   -- Step 1: Close active records where tracked columns changed
+   UPDATE schema_gold.dim_employees de
+   SET
+       expiry_date = COALESCE(e.effective_date, CURRENT_DATE) - 1,
+       is_current  = FALSE
+   FROM schema_silver.employees e
+   WHERE de.employee_id = e.employee_id
+     AND de.is_current = TRUE
+     AND (
+           COALESCE(de.region, '') <> COALESCE(e.region, '')
+        OR COALESCE(de.team, '')   <> COALESCE(e.team, '')
+     );
+   -- Step 2: Insert new versions for newly hired or updated employees
+   INSERT INTO schema_gold.dim_employees (
+       employee_id, full_name, "position", region, team, effective_date, expiry_date, is_current
+   )
+   SELECT
+       e.employee_id, e.full_name, e."position", e.region, e.team,
+       COALESCE(e.effective_date, CURRENT_DATE) AS effective_date,
+       NULL                                      AS expiry_date,
+       TRUE                                      AS is_current
+   FROM schema_silver.employees e
+   LEFT JOIN schema_gold.dim_employees de
+       ON e.employee_id = de.employee_id AND de.is_current = TRUE
+   WHERE de.employee_id IS NULL;
+   ```
  **Engineering Highlight: Point-in-Time (AS-OF) Join with SCD Type 2 (`dim_employees`)**
     Consider Sales Rep `EMP042` who transferred from Northern to Southern Vietnam on `2024-06-01`:
     * An order placed on `2024-03-10` automatically resolves to `effective_date = 2024-01-01` → Correctly crediting revenue to **Northern Vietnam**.
